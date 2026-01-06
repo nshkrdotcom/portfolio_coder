@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-01-06
+
+### Added
+
+- **Portfolio Integration** - Centralized project management system
+  - `Portfolio.Config` - Configuration management with multi-directory support
+  - `Portfolio.Registry` - Repository tracking and metadata storage
+  - `Portfolio.Context` - Per-repo context files (context.yml, notes.md)
+  - `Portfolio.Relationships` - Inter-repo relationship tracking
+  - `Portfolio.Scanner` - Multi-directory repository discovery
+  - `Portfolio.Syncer` - Sync computed fields with actual repos
+
+- **Portfolio CLI Commands**
+  - `mix portfolio.list` - List repos with status/type/language filters
+  - `mix portfolio.show` - Show detailed repo information
+  - `mix portfolio.scan` - Discover repos in configured directories
+  - `mix portfolio.add` - Add repo to tracking
+  - `mix portfolio.remove` - Remove repo from tracking
+  - `mix portfolio.sync` - Sync metadata with actual repo state
+  - `mix portfolio.status` - Show portfolio summary
+
+- **Multi-Directory Scanning** - Support for multiple base directories
+  - Configure in `config.yml` under `scan.directories`
+  - Default: `~/p/g/n` and `~/p/g/North-Shore-AI`
+  - Automatic language and type detection
+  - Git remote extraction
+
+- **Working Examples** in `examples/` directory
+  - `scan_repos.exs` - Scan and list discovered repos
+  - `show_portfolio_status.exs` - Display portfolio status
+  - `list_by_language.exs` - Group repos by language
+  - `find_stale_repos.exs` - Find repos needing attention
+  - `sync_all_repos.exs` - Sync all repo metadata
+  - `analyze_dependencies.exs` - Dependency analysis
+
+- **Design Documentation** - Detailed design document at `docs/20260105/portfolio_integration/design.md`
+
+### Changed
+
+- Updated architecture to include Portfolio layer
+- Extended README with portfolio features and usage
+
+### Dependencies
+
+- Added yaml_elixir ~> 2.9 for YAML parsing
+
+## [0.1.1] - 2025-12-30
+
+### Fixed
+
+- Minor bug fixes and improvements
+
 ## [0.1.0] - 2025-12-28
 
 ### Added
@@ -42,10 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
-- portfolio_manager ~> 0.3.0
-- portfolio_index ~> 0.2.0
-- portfolio_core ~> 0.2.0
+- portfolio_manager ~> 0.3.1
+- portfolio_index ~> 0.3.1
+- portfolio_core ~> 0.3.1
 - sourceror ~> 1.0
 
-[Unreleased]: https://github.com/nshkrdotcom/portfolio_coder/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/portfolio_coder/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/nshkrdotcom/portfolio_coder/compare/v0.1.1...v0.4.0
+[0.1.1]: https://github.com/nshkrdotcom/portfolio_coder/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nshkrdotcom/portfolio_coder/releases/tag/v0.1.0

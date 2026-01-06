@@ -2,7 +2,8 @@ defmodule Mix.Tasks.Code.Deps do
   @moduledoc """
   Analyze code dependencies.
 
-  Build and query dependency graphs for code repositories.
+  Build and query dependency graphs for code repositories using
+  in-memory graph storage.
 
   ## Usage
 
@@ -10,28 +11,36 @@ defmodule Mix.Tasks.Code.Deps do
 
   ## Commands
 
-    * `build` - Build a dependency graph
-    * `show` - Show dependencies of an entity
-    * `reverse` - Show reverse dependencies (dependents)
-    * `cycles` - Find circular dependencies
+    * `build` - Build a dependency graph from parsed code
+    * `show` - Show dependencies (imports) of a module
+    * `reverse` - Show reverse dependencies (imported by)
+    * `stats` - Show graph statistics
 
   ## Options
 
     * `--graph` - Name of the graph (default: "deps")
-    * `--language` - Project language (auto-detected)
-    * `--depth` - Traversal depth for queries (default: 1)
 
   ## Examples
 
       mix code.deps build ./my_project
-      mix code.deps show my_module --graph my_project
-      mix code.deps reverse utils --depth 2
-      mix code.deps cycles --graph my_project
+      mix code.deps show MyModule --graph my_project
+      mix code.deps reverse GenServer
+      mix code.deps stats
 
   """
   use Mix.Task
 
+  alias PortfolioCoder.Indexer.Parser
+  alias PortfolioCoder.Graph.InMemoryGraph
+
   @shortdoc "Analyze code dependencies"
+
+  @default_exclude [
+    "deps/",
+    "_build/",
+    "node_modules/",
+    ".git/"
+  ]
 
   @impl Mix.Task
   def run(args) do
@@ -41,11 +50,9 @@ defmodule Mix.Tasks.Code.Deps do
       OptionParser.parse(args,
         strict: [
           graph: :string,
-          language: :string,
-          depth: :integer,
           help: :boolean
         ],
-        aliases: [g: :graph, l: :language, d: :depth, h: :help]
+        aliases: [g: :graph, h: :help]
       )
 
     if opts[:help] do
@@ -55,7 +62,7 @@ defmodule Mix.Tasks.Code.Deps do
         ["build", path | _] -> build_graph(path, opts)
         ["show", entity | _] -> show_deps(entity, opts)
         ["reverse", entity | _] -> show_reverse_deps(entity, opts)
-        ["cycles" | _] -> find_cycles(opts)
+        ["stats" | _] -> show_stats(opts)
         _ -> shell_error("Unknown command. Use --help for usage.")
       end
     end
@@ -63,108 +70,183 @@ defmodule Mix.Tasks.Code.Deps do
 
   defp build_graph(path, opts) do
     path = Path.expand(path)
-    graph_id = opts[:graph] || "deps"
+    graph_name = opts[:graph] || "deps"
+
+    unless File.dir?(path) do
+      shell_error("Error: #{path} is not a directory")
+      exit({:shutdown, 1})
+    end
 
     shell_info("Building dependency graph for: #{path}")
 
-    build_opts =
-      []
-      |> maybe_add(:language, parse_language(opts[:language]))
+    # Find all source files
+    files =
+      path
+      |> Path.join("**/*.{ex,exs,py,js,ts}")
+      |> Path.wildcard()
+      |> Enum.filter(fn file ->
+        not Enum.any?(@default_exclude, &String.contains?(file, &1))
+      end)
+      |> Enum.sort()
 
-    case PortfolioCoder.build_dependency_graph(graph_id, path, build_opts) do
-      {:ok, stats} ->
-        shell_info("""
+    shell_info("Found #{length(files)} files to analyze")
 
-        Dependency graph built!
-          Graph ID: #{graph_id}
-          Nodes: #{stats[:nodes] || "unknown"}
-          Edges: #{stats[:edges] || "unknown"}
-        """)
+    # Create or get the graph
+    {:ok, graph} = get_or_create_graph(graph_name)
 
-      {:error, reason} ->
-        shell_error("Error: #{inspect(reason)}")
-        exit({:shutdown, 1})
-    end
+    # Process files
+    files_processed =
+      files
+      |> Enum.reduce(0, fn file, count ->
+        case Parser.parse(file) do
+          {:ok, parsed} ->
+            InMemoryGraph.add_from_parsed(graph, parsed, file)
+            count + 1
+
+          {:error, _} ->
+            count
+        end
+      end)
+
+    stats = InMemoryGraph.stats(graph)
+
+    shell_info("""
+
+    Dependency graph built!
+      Graph name: #{graph_name}
+      Files processed: #{files_processed}
+      Nodes: #{stats.node_count}
+      Edges: #{stats.edge_count}
+
+    Node types:
+    #{format_type_counts(stats.nodes_by_type)}
+
+    Edge types:
+    #{format_type_counts(stats.edges_by_type)}
+    """)
   end
 
   defp show_deps(entity, opts) do
-    graph_id = opts[:graph] || "deps"
-    depth = opts[:depth] || 1
+    graph_name = opts[:graph] || "deps"
 
-    shell_info("Dependencies of #{entity} (depth: #{depth}):\n")
+    case get_graph(graph_name) do
+      {:ok, graph} ->
+        shell_info("Dependencies (imports) of #{entity}:\n")
 
-    case PortfolioCoder.get_dependencies(graph_id, entity, depth: depth) do
-      {:ok, deps} ->
-        if deps == [] do
+        {:ok, imports} = InMemoryGraph.imports_of(graph, entity)
+
+        if imports == [] do
           shell_info("No dependencies found.")
         else
-          Enum.each(deps, &print_dep/1)
+          Enum.each(imports, fn imp ->
+            shell_info("  * #{imp}")
+          end)
+
+          shell_info("\nTotal: #{length(imports)} dependencies")
         end
 
-      {:error, reason} ->
-        shell_error("Error: #{inspect(reason)}")
-        exit({:shutdown, 1})
+      {:error, :not_found} ->
+        shell_error("Graph '#{graph_name}' not found. Run `mix code.deps build` first.")
     end
   end
 
   defp show_reverse_deps(entity, opts) do
-    graph_id = opts[:graph] || "deps"
-    depth = opts[:depth] || 1
+    graph_name = opts[:graph] || "deps"
 
-    shell_info("Dependents of #{entity} (depth: #{depth}):\n")
+    case get_graph(graph_name) do
+      {:ok, graph} ->
+        shell_info("Modules that import #{entity}:\n")
 
-    case PortfolioCoder.get_dependents(graph_id, entity, depth: depth) do
-      {:ok, deps} ->
-        if deps == [] do
-          shell_info("No dependents found.")
+        {:ok, importers} = InMemoryGraph.imported_by(graph, entity)
+
+        if importers == [] do
+          shell_info("No modules import this entity.")
         else
-          Enum.each(deps, &print_dep/1)
+          Enum.each(importers, fn imp ->
+            shell_info("  * #{imp}")
+          end)
+
+          shell_info("\nTotal: #{length(importers)} importers")
         end
 
-      {:error, reason} ->
-        shell_error("Error: #{inspect(reason)}")
-        exit({:shutdown, 1})
+      {:error, :not_found} ->
+        shell_error("Graph '#{graph_name}' not found. Run `mix code.deps build` first.")
     end
   end
 
-  defp find_cycles(opts) do
-    graph_id = opts[:graph] || "deps"
+  defp show_stats(opts) do
+    graph_name = opts[:graph] || "deps"
 
-    shell_info("Finding circular dependencies in graph: #{graph_id}\n")
+    case get_graph(graph_name) do
+      {:ok, graph} ->
+        stats = InMemoryGraph.stats(graph)
 
-    {:ok, cycles} = PortfolioCoder.find_cycles(graph_id)
-    print_cycles(cycles)
+        shell_info("""
+        Graph Statistics: #{graph_name}
+
+        Nodes: #{stats.node_count}
+        Edges: #{stats.edge_count}
+
+        Node types:
+        #{format_type_counts(stats.nodes_by_type)}
+
+        Edge types:
+        #{format_type_counts(stats.edges_by_type)}
+        """)
+
+        # Show top modules by connections
+        {:ok, modules} = InMemoryGraph.nodes_by_type(graph, :module)
+
+        if length(modules) > 0 do
+          shell_info("Top modules by import count:")
+
+          modules
+          |> Enum.map(fn m ->
+            {:ok, imports} = InMemoryGraph.imports_of(graph, m.id)
+            {m.name, length(imports)}
+          end)
+          |> Enum.sort_by(fn {_, count} -> -count end)
+          |> Enum.take(10)
+          |> Enum.each(fn {name, count} ->
+            shell_info("  #{name}: #{count} imports")
+          end)
+        end
+
+      {:error, :not_found} ->
+        shell_error("Graph '#{graph_name}' not found. Run `mix code.deps build` first.")
+    end
   end
 
-  defp print_cycles([]) do
-    shell_info("No circular dependencies found!")
+  defp get_or_create_graph(name) do
+    key = {:code_graph, name}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        {:ok, graph} = InMemoryGraph.new()
+        :persistent_term.put(key, graph)
+        {:ok, graph}
+
+      graph ->
+        {:ok, graph}
+    end
   end
 
-  # dialyzer:no_return - cycles detection is a stub that always returns []
-  @dialyzer {:nowarn_function, print_cycles: 1}
-  defp print_cycles(cycles) do
-    shell_info("Found #{length(cycles)} circular dependencies:\n")
+  defp get_graph(name) do
+    key = {:code_graph, name}
 
-    Enum.each(cycles, fn cycle ->
-      path = Enum.join(cycle, " -> ")
-      shell_info("  Warning: #{path}")
-    end)
+    case :persistent_term.get(key, nil) do
+      nil -> {:error, :not_found}
+      graph -> {:ok, graph}
+    end
   end
 
-  defp print_dep(dep) when is_map(dep) do
-    name = dep[:id] || dep[:name] || "unknown"
-    type = dep[:type] || ""
-    shell_info("  * #{name} #{type}")
+  defp format_type_counts(type_map) do
+    type_map
+    |> Enum.sort_by(fn {_, count} -> -count end)
+    |> Enum.map(fn {type, count} -> "  #{type}: #{count}" end)
+    |> Enum.join("\n")
   end
-
-  defp print_dep(dep), do: shell_info("  * #{dep}")
 
   defp shell_info(message), do: IO.puts(message)
   defp shell_error(message), do: IO.puts(:stderr, message)
-
-  defp maybe_add(opts, _key, nil), do: opts
-  defp maybe_add(opts, key, value), do: Keyword.put(opts, key, value)
-
-  defp parse_language(nil), do: nil
-  defp parse_language(lang), do: String.to_existing_atom(lang)
 end

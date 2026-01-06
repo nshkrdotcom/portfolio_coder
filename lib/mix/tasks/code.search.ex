@@ -2,6 +2,9 @@ defmodule Mix.Tasks.Code.Search do
   @moduledoc """
   Search indexed code repositories.
 
+  Uses TF-IDF keyword scoring against the in-memory index.
+  Run `mix code.index PATH` first to build the index.
+
   ## Usage
 
       mix code.search QUERY [OPTIONS]
@@ -12,6 +15,7 @@ defmodule Mix.Tasks.Code.Search do
     * `--language` - Filter by programming language
     * `--limit` - Maximum number of results (default: 10)
     * `--file` - Filter by file pattern
+    * `--min-score` - Minimum score threshold (default: 0.0)
 
   ## Examples
 
@@ -22,6 +26,8 @@ defmodule Mix.Tasks.Code.Search do
 
   """
   use Mix.Task
+
+  alias PortfolioCoder.Indexer.InMemorySearch
 
   @shortdoc "Search indexed code"
 
@@ -36,6 +42,7 @@ defmodule Mix.Tasks.Code.Search do
           language: :string,
           limit: :integer,
           file: :string,
+          min_score: :float,
           help: :boolean
         ],
         aliases: [i: :index, l: :language, n: :limit, f: :file, h: :help]
@@ -58,15 +65,18 @@ defmodule Mix.Tasks.Code.Search do
   defp search_code(query, opts) do
     shell_info("Searching for: #{query}\n")
 
-    search_opts =
-      []
-      |> maybe_add(:index_id, opts[:index])
-      |> maybe_add(:language, parse_language(opts[:language]))
-      |> maybe_add(:limit, opts[:limit])
-      |> maybe_add(:file_pattern, opts[:file])
+    index_name = opts[:index] || "default"
 
-    case PortfolioCoder.search_code(query, search_opts) do
-      {:ok, results} ->
+    case get_index(index_name) do
+      {:ok, index} ->
+        search_opts =
+          [limit: opts[:limit] || 10]
+          |> maybe_add(:language, parse_language(opts[:language]))
+          |> maybe_add(:path_pattern, opts[:file])
+          |> maybe_add(:min_score, opts[:min_score])
+
+        {:ok, results} = InMemorySearch.search(index, query, search_opts)
+
         if results == [] do
           shell_info("No results found.")
         else
@@ -74,17 +84,44 @@ defmodule Mix.Tasks.Code.Search do
           shell_info("\nFound #{length(results)} results.")
         end
 
-      {:error, reason} ->
-        shell_error("Error: #{inspect(reason)}")
+      {:error, :not_found} ->
+        shell_error("""
+        Error: Index '#{index_name}' not found.
+
+        Run `mix code.index PATH` first to build the index.
+        """)
+
         exit({:shutdown, 1})
     end
   end
 
+  defp get_index(name) do
+    key = {:code_index, name}
+
+    case :persistent_term.get(key, nil) do
+      nil -> {:error, :not_found}
+      index -> {:ok, index}
+    end
+  end
+
   defp print_result(result) do
+    path = result.metadata[:relative_path] || result.metadata[:path] || "unknown"
+    language = result.metadata[:language] || :unknown
+    name = result.metadata[:name]
+    type = result.metadata[:type]
+
+    header =
+      if name do
+        "#{type}: #{name}"
+      else
+        Path.basename(path)
+      end
+
     shell_info("""
     -----------------------------------------
-    File: #{result.path}
-    Language: #{result.language} | Score: #{Float.round(result.score, 3)}
+    #{header}
+    File: #{path}
+    Language: #{language} | Score: #{Float.round(result.score, 3)}
 
     #{truncate(result.content, 300)}
     """)
@@ -103,5 +140,5 @@ defmodule Mix.Tasks.Code.Search do
   defp maybe_add(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp parse_language(nil), do: nil
-  defp parse_language(lang), do: String.to_existing_atom(lang)
+  defp parse_language(lang), do: String.to_atom(lang)
 end

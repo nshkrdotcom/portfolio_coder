@@ -1,7 +1,7 @@
 defmodule PortfolioCoder.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.4.0"
   @source_url "https://github.com/nshkrdotcom/portfolio_coder"
 
   def project do
@@ -26,11 +26,6 @@ defmodule PortfolioCoder.MixProject do
 
       # Testing
       test_coverage: [tool: ExCoveralls],
-      preferred_cli_env: [
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.html": :test
-      ],
 
       # Dialyzer
       dialyzer: [
@@ -48,15 +43,25 @@ defmodule PortfolioCoder.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.html": :test
+      ]
+    ]
+  end
+
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
     [
-      # Portfolio Ecosystem
-      {:portfolio_manager, "~> 0.3.0"},
-      {:portfolio_index, "~> 0.3.0"},
-      {:portfolio_core, "~> 0.3.0"},
+      # Portfolio Ecosystem (local path for development)
+      {:portfolio_manager, path: "../portfolio_manager", override: true},
+      {:portfolio_index, path: "../portfolio_index", override: true},
+      {:portfolio_core, path: "../portfolio_core", override: true},
 
       # Code Parsing
       {:sourceror, "~> 1.0"},
@@ -66,6 +71,9 @@ defmodule PortfolioCoder.MixProject do
 
       # JSON
       {:jason, "~> 1.4"},
+
+      # YAML
+      {:yaml_elixir, "~> 2.9"},
 
       # Telemetry
       {:telemetry, "~> 1.2"},
@@ -103,7 +111,7 @@ defmodule PortfolioCoder.MixProject do
         "GitHub" => @source_url,
         "Portfolio Ecosystem" => "https://github.com/nshkrdotcom/portfolio_core"
       },
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md assets),
       maintainers: ["nshkrdotcom"]
     ]
   end
@@ -111,6 +119,7 @@ defmodule PortfolioCoder.MixProject do
   defp docs do
     [
       main: "readme",
+      assets: %{"assets" => "assets"},
       logo: "assets/portfolio_coder.svg",
       source_ref: "v#{@version}",
       source_url: @source_url,
@@ -124,6 +133,14 @@ defmodule PortfolioCoder.MixProject do
           PortfolioCoder,
           PortfolioCoder.Indexer,
           PortfolioCoder.Search
+        ],
+        Portfolio: [
+          PortfolioCoder.Portfolio.Config,
+          PortfolioCoder.Portfolio.Registry,
+          PortfolioCoder.Portfolio.Context,
+          PortfolioCoder.Portfolio.Relationships,
+          PortfolioCoder.Portfolio.Scanner,
+          PortfolioCoder.Portfolio.Syncer
         ],
         Parsers: [
           PortfolioCoder.Parsers,
@@ -143,11 +160,22 @@ defmodule PortfolioCoder.MixProject do
           PortfolioCoder.Tools.ListFiles,
           PortfolioCoder.Tools.AnalyzeCode
         ],
-        CLI: [
+        "CLI - Code": [
           Mix.Tasks.Code.Index,
           Mix.Tasks.Code.Search,
           Mix.Tasks.Code.Ask,
           Mix.Tasks.Code.Deps
+        ],
+        "CLI - Portfolio": [
+          Mix.Tasks.Portfolio.List,
+          Mix.Tasks.Portfolio.Show,
+          Mix.Tasks.Portfolio.Scan,
+          Mix.Tasks.Portfolio.Add,
+          Mix.Tasks.Portfolio.Remove,
+          Mix.Tasks.Portfolio.Sync,
+          Mix.Tasks.Portfolio.Status,
+          Mix.Tasks.Portfolio.Search,
+          Mix.Tasks.Portfolio.Ask
         ]
       ]
     ]
