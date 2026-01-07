@@ -212,27 +212,14 @@ defmodule PortfolioCoder.Indexer.InMemorySearch do
     doc_terms = tokenize(content)
     doc_term_set = MapSet.new(doc_terms)
     doc_term_freq = Enum.frequencies(doc_terms)
+    doc_term_count = max(length(doc_terms), 1)
 
     # Simple TF-IDF-like scoring
     Enum.reduce(query_terms, 0.0, fn term, acc ->
       if MapSet.member?(doc_term_set, term) do
-        tf = Map.get(doc_term_freq, term, 0) / max(length(doc_terms), 1)
-        df = length(Map.get(state.term_index, term, []))
-        idf = :math.log(state.doc_count / max(df, 1)) + 1
-
-        acc + tf * idf
+        acc + tf_idf_score(state, doc_term_freq, doc_term_count, term)
       else
-        # Partial match bonus
-        partial_bonus =
-          Enum.reduce(doc_terms, 0.0, fn doc_term, bonus ->
-            if String.contains?(doc_term, term) or String.contains?(term, doc_term) do
-              bonus + 0.1
-            else
-              bonus
-            end
-          end)
-
-        acc + partial_bonus
+        acc + partial_match_bonus(doc_terms, term)
       end
     end)
   end
@@ -244,13 +231,38 @@ defmodule PortfolioCoder.Indexer.InMemorySearch do
 
     metadata = doc.metadata || %{}
 
-    cond do
-      language && metadata[:language] != language -> false
-      type && metadata[:type] != type -> false
-      path_pattern && not String.contains?(metadata[:path] || "", path_pattern) -> false
-      true -> true
-    end
+    matches_language?(metadata, language) and
+      matches_type?(metadata, type) and
+      matches_path?(metadata, path_pattern)
   end
+
+  defp tf_idf_score(state, doc_term_freq, doc_term_count, term) do
+    tf = Map.get(doc_term_freq, term, 0) / doc_term_count
+    df = length(Map.get(state.term_index, term, []))
+    idf = :math.log(state.doc_count / max(df, 1)) + 1
+    tf * idf
+  end
+
+  defp partial_match_bonus(doc_terms, term) do
+    Enum.reduce(doc_terms, 0.0, fn doc_term, bonus ->
+      if String.contains?(doc_term, term) or String.contains?(term, doc_term) do
+        bonus + 0.1
+      else
+        bonus
+      end
+    end)
+  end
+
+  defp matches_language?(_metadata, nil), do: true
+  defp matches_language?(metadata, language), do: metadata[:language] == language
+
+  defp matches_type?(_metadata, nil), do: true
+  defp matches_type?(metadata, type), do: metadata[:type] == type
+
+  defp matches_path?(_metadata, nil), do: true
+
+  defp matches_path?(metadata, path_pattern),
+    do: String.contains?(metadata[:path] || "", path_pattern)
 
   defp tokenize(text) when is_binary(text) do
     text

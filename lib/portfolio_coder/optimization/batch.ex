@@ -155,29 +155,40 @@ defmodule PortfolioCoder.Optimization.Batch do
 
     fn
       :flush ->
-        items = :ets.tab2list(items_ref) |> Enum.map(fn {_, v} -> v end)
-        :ets.delete_all_objects(items_ref)
-        :atomics.put(buffer, 1, 0)
-
-        if length(items) > 0 do
-          {:batch, processor.(items)}
-        else
-          :ok
-        end
+        flush_batch(items_ref, buffer, processor)
 
       item ->
-        idx = :atomics.add_get(buffer, 1, 1)
-        :ets.insert(items_ref, {idx, item})
-
-        if idx >= batch_size do
-          items = :ets.tab2list(items_ref) |> Enum.map(fn {_, v} -> v end)
-          :ets.delete_all_objects(items_ref)
-          :atomics.put(buffer, 1, 0)
-          {:batch, processor.(items)}
-        else
-          :ok
-        end
+        add_batch_item(item, items_ref, buffer, batch_size, processor)
     end
+  end
+
+  defp flush_batch(items_ref, buffer, processor) do
+    items = drain_items(items_ref, buffer)
+
+    if items == [] do
+      :ok
+    else
+      {:batch, processor.(items)}
+    end
+  end
+
+  defp add_batch_item(item, items_ref, buffer, batch_size, processor) do
+    idx = :atomics.add_get(buffer, 1, 1)
+    :ets.insert(items_ref, {idx, item})
+
+    if idx >= batch_size do
+      items = drain_items(items_ref, buffer)
+      {:batch, processor.(items)}
+    else
+      :ok
+    end
+  end
+
+  defp drain_items(items_ref, buffer) do
+    items = :ets.tab2list(items_ref) |> Enum.map(fn {_, v} -> v end)
+    :ets.delete_all_objects(items_ref)
+    :atomics.put(buffer, 1, 0)
+    items
   end
 
   @doc """
@@ -229,18 +240,16 @@ defmodule PortfolioCoder.Optimization.Batch do
   defp calculate_interval(rate, :hour), do: div(3_600_000, rate)
 
   defp do_retry(func, max_retries, backoff, base_delay, attempt) do
-    try do
-      {:ok, func.()}
-    rescue
-      e ->
-        if attempt < max_retries do
-          delay = calculate_delay(backoff, base_delay, attempt)
-          Process.sleep(delay)
-          do_retry(func, max_retries, backoff, base_delay, attempt + 1)
-        else
-          {:error, e}
-        end
-    end
+    {:ok, func.()}
+  rescue
+    e ->
+      if attempt < max_retries do
+        delay = calculate_delay(backoff, base_delay, attempt)
+        Process.sleep(delay)
+        do_retry(func, max_retries, backoff, base_delay, attempt + 1)
+      else
+        {:error, e}
+      end
   end
 
   defp calculate_delay(:linear, base, attempt), do: base * (attempt + 1)

@@ -228,8 +228,7 @@ defmodule PortfolioCoder.Review.PRReviewer do
     chunk
     |> String.split("\n")
     |> Enum.filter(&String.starts_with?(&1, "+"))
-    |> Enum.map(&String.slice(&1, 1..-1//1))
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", &String.slice(&1, 1..-1//1))
   end
 
   defp run_check(:security, parsed, _reviewer) do
@@ -420,21 +419,22 @@ defmodule PortfolioCoder.Review.PRReviewer do
 
     # Check line length
     long_lines = Enum.filter(lines, &(String.length(&1) > reviewer.max_line_length))
+    long_lines_count = length(long_lines)
 
     comments =
-      if length(long_lines) > 0 do
+      if long_lines == [] do
+        comments
+      else
         [
           %{
             file: file.file,
             line: nil,
             type: :suggestion,
             message:
-              "#{length(long_lines)} lines exceed #{reviewer.max_line_length} characters. Consider breaking them up."
+              "#{long_lines_count} lines exceed #{reviewer.max_line_length} characters. Consider breaking them up."
           }
           | comments
         ]
-      else
-        comments
       end
 
     comments

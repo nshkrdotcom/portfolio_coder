@@ -5,8 +5,8 @@ defmodule PortfolioCoder.Agent.Tools.GraphStats do
 
   @behaviour PortfolioCoder.Agent.Tool
 
-  alias PortfolioCoder.Graph.InMemoryGraph
   alias PortfolioCoder.Graph.CallGraph
+  alias PortfolioCoder.Graph.InMemoryGraph
 
   @impl true
   def name, do: :graph_stats
@@ -36,50 +36,62 @@ defmodule PortfolioCoder.Agent.Tools.GraphStats do
 
   @impl true
   def execute(params, context) do
-    include_hot_paths = params[:include_hot_paths] || params["include_hot_paths"] || false
-
-    include_entry_points =
-      params[:include_entry_points] || params["include_entry_points"] || false
+    include_hot_paths = bool_param(params, :include_hot_paths)
+    include_entry_points = bool_param(params, :include_entry_points)
 
     case context[:graph] do
       nil ->
         {:error, "No graph available. Build a dependency graph first."}
 
       graph ->
-        stats = InMemoryGraph.stats(graph)
-
-        result = %{
-          node_count: stats.node_count,
-          edge_count: stats.edge_count,
-          nodes_by_type: stats.nodes_by_type,
-          edges_by_type: stats.edges_by_type
-        }
-
         result =
-          if include_hot_paths do
-            {:ok, hot} = CallGraph.hot_paths(graph, limit: 5)
-
-            hot_formatted =
-              Enum.map(hot, fn h -> %{id: h.id, name: h.name, connectivity: h.connectivity} end)
-
-            Map.put(result, :hot_paths, hot_formatted)
-          else
-            result
-          end
-
-        result =
-          if include_entry_points do
-            {:ok, entries} = CallGraph.entry_points(graph)
-
-            entry_formatted =
-              Enum.take(entries, 10) |> Enum.map(fn e -> %{id: e.id, name: e.name} end)
-
-            Map.put(result, :entry_points, entry_formatted)
-          else
-            result
-          end
+          graph
+          |> base_stats()
+          |> maybe_add_hot_paths(graph, include_hot_paths)
+          |> maybe_add_entry_points(graph, include_entry_points)
 
         {:ok, result}
     end
   end
+
+  defp bool_param(params, key) when is_map(params) do
+    Map.get(params, key) || Map.get(params, Atom.to_string(key)) || false
+  end
+
+  defp bool_param(params, key) when is_list(params) do
+    Keyword.get(params, key, false)
+  end
+
+  defp base_stats(graph) do
+    stats = InMemoryGraph.stats(graph)
+
+    %{
+      node_count: stats.node_count,
+      edge_count: stats.edge_count,
+      nodes_by_type: stats.nodes_by_type,
+      edges_by_type: stats.edges_by_type
+    }
+  end
+
+  defp maybe_add_hot_paths(result, graph, true) do
+    {:ok, hot} = CallGraph.hot_paths(graph, limit: 5)
+
+    hot_formatted =
+      Enum.map(hot, fn h -> %{id: h.id, name: h.name, connectivity: h.connectivity} end)
+
+    Map.put(result, :hot_paths, hot_formatted)
+  end
+
+  defp maybe_add_hot_paths(result, _graph, false), do: result
+
+  defp maybe_add_entry_points(result, graph, true) do
+    {:ok, entries} = CallGraph.entry_points(graph)
+
+    entry_formatted =
+      Enum.take(entries, 10) |> Enum.map(fn e -> %{id: e.id, name: e.name} end)
+
+    Map.put(result, :entry_points, entry_formatted)
+  end
+
+  defp maybe_add_entry_points(result, _graph, false), do: result
 end

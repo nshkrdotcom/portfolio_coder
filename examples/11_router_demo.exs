@@ -94,7 +94,7 @@ defmodule RouterDemo do
     start_time = System.monotonic_time(:millisecond)
     messages = [%{role: :user, content: prompt}]
 
-    case provider.module.complete(messages, max_tokens: 500) do
+    case provider.module.complete(messages, max_tokens: 500, max_turns: 3) do
       {:ok, %{content: response}} ->
         duration = System.monotonic_time(:millisecond) - start_time
         {:ok, provider.name, response, duration}
@@ -110,9 +110,9 @@ defmodule RouterDemo do
   end
 
   defp select_provider(:capable, available) do
-    # Prefer Claude for code generation
-    Enum.find(available, &(&1.name == :anthropic)) ||
-      Enum.find(available, &(&1.name == :openai)) ||
+    # Prefer OpenAI for code generation
+    Enum.find(available, &(&1.name == :openai)) ||
+      Enum.find(available, &(&1.name == :anthropic)) ||
       hd(available)
   end
 
@@ -169,7 +169,7 @@ defmodule RouterDemo do
        :smart}
     ]
 
-    for {name, prompt, strategy} <- tasks do
+    for {name, _prompt, strategy} <- tasks do
       provider = select_provider(strategy, available)
       IO.puts("Task: #{name}")
       IO.puts("  -> Routed to: #{provider.name} (#{strategy} strategy)")

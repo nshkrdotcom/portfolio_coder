@@ -9,10 +9,10 @@ defmodule PortfolioCoder.Agent.SessionTest do
 
       assert is_binary(session.id)
       assert session.messages == []
-      assert session.context.cwd != nil
+      assert is_binary(session.context.cwd)
       assert session.metadata.tool_calls == 0
-      assert session.created_at != nil
-      assert session.updated_at != nil
+      assert match?(%DateTime{}, session.created_at)
+      assert match?(%DateTime{}, session.updated_at)
     end
 
     test "accepts index and graph options" do

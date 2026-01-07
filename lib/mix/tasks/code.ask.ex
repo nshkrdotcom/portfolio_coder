@@ -93,7 +93,7 @@ defmodule Mix.Tasks.Code.Ask do
     context =
       results
       |> Enum.with_index(1)
-      |> Enum.map(fn {result, idx} ->
+      |> Enum.map_join("\n", fn {result, idx} ->
         path = result.metadata[:relative_path] || result.metadata[:path] || "unknown"
         name = result.metadata[:name]
 
@@ -111,7 +111,6 @@ defmodule Mix.Tasks.Code.Ask do
         ```
         """
       end)
-      |> Enum.join("\n")
 
     # Try available LLM providers
     case get_llm_provider() do

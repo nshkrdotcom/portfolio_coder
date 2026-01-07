@@ -235,7 +235,7 @@ Discovers and analyzes repositories in configured directories.
 | `detect_language/1` | `(String.t()) -> atom() \| nil` | Detects primary language |
 | `detect_type/1` | `(String.t()) -> atom() \| nil` | Detects repo type |
 | `extract_remotes/1` | `(String.t()) -> [map()]` | Gets git remotes |
-| `is_git_repo?/1` | `(String.t()) -> boolean()` | Checks if git repo |
+| `git_repo?/1` | `(String.t()) -> boolean()` | Checks if git repo |
 | `extract_dependencies/2` | `(String.t(), atom()) -> %{runtime: [...], dev: [...]}` | Extracts deps |
 
 **Language detection markers:**
@@ -374,7 +374,7 @@ mix run examples/scan_repos.exs
 │         │   ├─→ File.ls!(directory)                                    │
 │         │   ├─→ Enum.filter(&File.dir?/1)                              │
 │         │   ├─→ Enum.reject(&excluded?/2)                              │
-│         │   ├─→ Enum.filter(&is_git_repo?/1)                           │
+│         │   ├─→ Enum.filter(&git_repo?/1)                              │
 │         │   │   └─→ File.dir?(Path.join(path, ".git"))                 │
 │         │   │                                                          │
 │         │   └─→ Enum.map(&build_scan_result/1)                         │

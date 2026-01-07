@@ -231,15 +231,7 @@ defmodule PortfolioCoder.Telemetry.Reporter do
     IO.puts("📈 Counters")
     IO.puts(String.duplicate("-", 40))
 
-    Enum.each(counters, fn {name, data} ->
-      IO.puts("  #{name}: #{data.total}")
-
-      Enum.each(data.by_tags, fn entry ->
-        if map_size(entry.tags) > 0 do
-          IO.puts("    #{format_tags(entry.tags)}: #{entry.count}")
-        end
-      end)
-    end)
+    Enum.each(counters, &print_counter/1)
 
     IO.puts("")
   end
@@ -252,16 +244,38 @@ defmodule PortfolioCoder.Telemetry.Reporter do
     IO.puts("📉 Gauges")
     IO.puts(String.duplicate("-", 40))
 
-    Enum.each(gauges, fn {name, values} ->
-      IO.puts("  #{name}:")
-
-      Enum.each(values, fn v ->
-        tags_str = if map_size(v.tags) > 0, do: " [#{format_tags(v.tags)}]", else: ""
-        IO.puts("    #{v.value}#{tags_str}")
-      end)
-    end)
+    Enum.each(gauges, &print_gauge/1)
 
     IO.puts("")
+  end
+
+  defp print_counter({name, data}) do
+    IO.puts("  #{name}: #{data.total}")
+    Enum.each(data.by_tags, &print_counter_tag/1)
+  end
+
+  defp print_counter_tag(%{tags: tags, count: count}) when map_size(tags) > 0 do
+    IO.puts("    #{format_tags(tags)}: #{count}")
+  end
+
+  defp print_counter_tag(_entry), do: :ok
+
+  defp print_gauge({name, values}) do
+    IO.puts("  #{name}:")
+    Enum.each(values, &print_gauge_value/1)
+  end
+
+  defp print_gauge_value(%{tags: tags, value: value}) do
+    tags_str = format_optional_tags(tags)
+    IO.puts("    #{value}#{tags_str}")
+  end
+
+  defp format_optional_tags(tags) do
+    if map_size(tags) == 0 do
+      ""
+    else
+      " [#{format_tags(tags)}]"
+    end
   end
 
   defp format_number(num) when is_float(num) do
@@ -273,18 +287,13 @@ defmodule PortfolioCoder.Telemetry.Reporter do
   defp format_tags(tags) when map_size(tags) == 0, do: ""
 
   defp format_tags(tags) do
-    tags
-    |> Enum.map(fn {k, v} -> "#{k}=#{v}" end)
-    |> Enum.join(", ")
+    Enum.map_join(tags, ", ", fn {k, v} -> "#{k}=#{v}" end)
   end
 
   defp prometheus_tags(tags) when map_size(tags) == 0, do: ""
 
   defp prometheus_tags(tags) do
-    labels =
-      tags
-      |> Enum.map(fn {k, v} -> "#{k}=\"#{v}\"" end)
-      |> Enum.join(",")
+    labels = Enum.map_join(tags, ",", fn {k, v} -> "#{k}=\"#{v}\"" end)
 
     "{#{labels}}"
   end

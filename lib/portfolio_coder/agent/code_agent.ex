@@ -124,11 +124,9 @@ defmodule PortfolioCoder.Agent.CodeAgent do
   """
   @spec tools_summary() :: String.t()
   def tools_summary do
-    @tools
-    |> Enum.map(fn tool ->
+    Enum.map_join(@tools, "\n", fn tool ->
       "- #{tool.name()}: #{tool.description()}"
     end)
-    |> Enum.join("\n")
   end
 
   # Private helpers
@@ -246,11 +244,9 @@ defmodule PortfolioCoder.Agent.CodeAgent do
     if results == [] do
       "I couldn't find relevant information for: #{task}"
     else
-      results
-      |> Enum.map(fn {tool, result} ->
+      Enum.map_join(results, "\n\n", fn {tool, result} ->
         "## #{format_tool_name(tool)}\n#{format_result(result)}"
       end)
-      |> Enum.join("\n\n")
     end
   end
 
@@ -265,8 +261,7 @@ defmodule PortfolioCoder.Agent.CodeAgent do
   defp format_result(result) when is_list(result) do
     result
     |> Enum.take(10)
-    |> Enum.map(&inspect/1)
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", &inspect/1)
   end
 
   defp format_result(result) when is_map(result) do

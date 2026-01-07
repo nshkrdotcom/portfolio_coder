@@ -21,7 +21,7 @@ defmodule Mix.Tasks.Portfolio.Show do
   """
   use Mix.Task
 
-  alias PortfolioCoder.Portfolio.{Registry, Context, Relationships}
+  alias PortfolioCoder.Portfolio.{Context, Registry, Relationships}
 
   @switches [section: :string, json: :boolean]
 
@@ -101,51 +101,70 @@ defmodule Mix.Tasks.Portfolio.Show do
   end
 
   defp show_full(repo, context, relationships) do
-    Mix.shell().info(repo.id)
+    print_header(repo.id)
+    print_repo_details(repo)
+    print_remote(repo.remote_url)
+    print_purpose(context["purpose"])
+    maybe_show_computed(context["computed"])
+    print_relationships(repo.id, relationships)
+    print_todos(context["todos"])
+  end
+
+  defp print_header(repo_id) do
+    Mix.shell().info(repo_id)
     Mix.shell().info(String.duplicate("=", 70))
     Mix.shell().info("")
+  end
 
+  defp print_repo_details(repo) do
     Mix.shell().info("Type:        #{repo.type} (#{repo.language})")
     Mix.shell().info("Status:      #{repo.status}")
     Mix.shell().info("Path:        #{repo.path}")
+    Mix.shell().info("")
+  end
 
-    if repo.remote_url do
-      Mix.shell().info("Remote:      #{repo.remote_url}")
+  defp print_remote(nil), do: :ok
+
+  defp print_remote(remote_url) do
+    Mix.shell().info("Remote:      #{remote_url}")
+    Mix.shell().info("")
+  end
+
+  defp print_purpose(nil), do: :ok
+
+  defp print_purpose(purpose) do
+    Mix.shell().info("Purpose:")
+    Mix.shell().info("  #{String.trim(purpose)}")
+    Mix.shell().info("")
+  end
+
+  defp maybe_show_computed(nil), do: :ok
+  defp maybe_show_computed(computed), do: show_computed(computed)
+
+  defp print_relationships(_repo_id, []), do: :ok
+
+  defp print_relationships(repo_id, relationships) do
+    Mix.shell().info("Relationships:")
+
+    for rel <- relationships do
+      direction = if rel.from == repo_id, do: "->", else: "<-"
+      other = if rel.from == repo_id, do: rel.to, else: rel.from
+      Mix.shell().info("  #{direction} #{other} (#{rel.type})")
     end
 
     Mix.shell().info("")
+  end
 
-    if purpose = context["purpose"] do
-      Mix.shell().info("Purpose:")
-      Mix.shell().info("  #{String.trim(purpose)}")
-      Mix.shell().info("")
+  defp print_todos(nil), do: :ok
+
+  defp print_todos(todos) do
+    Mix.shell().info("Todos:")
+
+    for todo <- List.wrap(todos) do
+      Mix.shell().info("  - #{todo}")
     end
 
-    if computed = context["computed"] do
-      show_computed(computed)
-    end
-
-    unless Enum.empty?(relationships) do
-      Mix.shell().info("Relationships:")
-
-      for rel <- relationships do
-        direction = if rel.from == repo.id, do: "->", else: "<-"
-        other = if rel.from == repo.id, do: rel.to, else: rel.from
-        Mix.shell().info("  #{direction} #{other} (#{rel.type})")
-      end
-
-      Mix.shell().info("")
-    end
-
-    if todos = context["todos"] do
-      Mix.shell().info("Todos:")
-
-      for todo <- List.wrap(todos) do
-        Mix.shell().info("  - #{todo}")
-      end
-
-      Mix.shell().info("")
-    end
+    Mix.shell().info("")
   end
 
   defp show_notes(repo_id) do

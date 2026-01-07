@@ -177,7 +177,7 @@ defmodule PortfolioCoder.Evaluation.RAGTriad do
       |> Enum.map(&String.trim/1)
 
     %{
-      has_hallucination: length(unsupported) > 0,
+      has_hallucination: unsupported != [],
       unsupported_claims: unsupported,
       confidence: calculate_hallucination_confidence(unsupported, answer_sentences)
     }
@@ -218,8 +218,9 @@ defmodule PortfolioCoder.Evaluation.RAGTriad do
     |> String.downcase()
     |> String.replace(~r/[^\w\s]/, " ")
     |> String.split(~r/\s+/, trim: true)
-    |> Enum.reject(&(String.length(&1) < 2))
-    |> Enum.reject(&stop_word?/1)
+    |> Enum.filter(fn token ->
+      String.length(token) >= 2 and not stop_word?(token)
+    end)
   end
 
   defp stop_word?(word) do
@@ -251,11 +252,13 @@ defmodule PortfolioCoder.Evaluation.RAGTriad do
         MapSet.new(context_tokens)
       end
 
-    if length(answer_tokens) == 0 do
+    token_count = length(answer_tokens)
+
+    if token_count == 0 do
       0.0
     else
       covered = Enum.count(answer_tokens, &MapSet.member?(context_set, &1))
-      covered / length(answer_tokens)
+      covered / token_count
     end
   end
 
@@ -277,33 +280,52 @@ defmodule PortfolioCoder.Evaluation.RAGTriad do
     question_lower = String.downcase(question)
     answer_lower = String.downcase(answer)
 
-    cond do
-      # What/How questions should have explanatory answers
-      String.contains?(question_lower, "what") or String.contains?(question_lower, "how") ->
+    case classify_question(question_lower) do
+      :explanation ->
         if String.length(answer) > 20, do: 0.8, else: 0.4
 
-      # Yes/No questions
-      String.contains?(question_lower, "is ") or String.contains?(question_lower, "does ") ->
-        if String.contains?(answer_lower, "yes") or String.contains?(answer_lower, "no"),
-          do: 0.9,
-          else: 0.5
+      :yes_no ->
+        if contains_yes_no?(answer_lower), do: 0.9, else: 0.5
 
-      # Why questions should have "because" or reasoning
-      String.contains?(question_lower, "why") ->
-        if String.contains?(answer_lower, "because") or String.contains?(answer_lower, "since"),
-          do: 0.9,
-          else: 0.5
+      :why ->
+        if contains_reasoning?(answer_lower), do: 0.9, else: 0.5
 
-      true ->
+      :other ->
         0.6
     end
   end
 
+  defp classify_question(question_lower) do
+    cond do
+      String.contains?(question_lower, "what") or String.contains?(question_lower, "how") ->
+        :explanation
+
+      String.contains?(question_lower, "is ") or String.contains?(question_lower, "does ") ->
+        :yes_no
+
+      String.contains?(question_lower, "why") ->
+        :why
+
+      true ->
+        :other
+    end
+  end
+
+  defp contains_yes_no?(answer_lower) do
+    String.contains?(answer_lower, "yes") or String.contains?(answer_lower, "no")
+  end
+
+  defp contains_reasoning?(answer_lower) do
+    String.contains?(answer_lower, "because") or String.contains?(answer_lower, "since")
+  end
+
   defp calculate_hallucination_confidence(unsupported, all_sentences) do
-    if length(all_sentences) == 0 do
+    sentence_count = length(all_sentences)
+
+    if sentence_count == 0 do
       0.0
     else
-      length(unsupported) / length(all_sentences)
+      length(unsupported) / sentence_count
     end
   end
 
@@ -323,11 +345,13 @@ defmodule PortfolioCoder.Evaluation.RAGTriad do
   end
 
   defp calculate_pass_rate(results, threshold \\ 0.5) do
-    if length(results) == 0 do
+    result_count = length(results)
+
+    if result_count == 0 do
       0.0
     else
       passing = Enum.count(results, &(&1.overall_score >= threshold))
-      passing / length(results)
+      passing / result_count
     end
   end
 end

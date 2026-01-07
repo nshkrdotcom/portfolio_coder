@@ -1,0 +1,9 @@
+version: "1.0"
+router:
+  strategy: fallback
+  providers: []
+pipelines:
+  ingestion:
+    enabled: false
+  embedding:
+    enabled: false

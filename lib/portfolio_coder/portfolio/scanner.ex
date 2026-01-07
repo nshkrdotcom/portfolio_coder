@@ -91,7 +91,7 @@ defmodule PortfolioCoder.Portfolio.Scanner do
         |> Enum.map(&Path.join(directory, &1))
         |> Enum.filter(&File.dir?/1)
         |> Enum.reject(&excluded?(&1, exclude_patterns))
-        |> Enum.filter(&is_git_repo?/1)
+        |> Enum.filter(&git_repo?/1)
         |> Enum.map(&build_scan_result/1)
 
       {:ok, results}
@@ -148,8 +148,8 @@ defmodule PortfolioCoder.Portfolio.Scanner do
   @doc """
   Checks if a directory is a git repository.
   """
-  @spec is_git_repo?(String.t()) :: boolean()
-  def is_git_repo?(path) do
+  @spec git_repo?(String.t()) :: boolean()
+  def git_repo?(path) do
     File.dir?(Path.join(path, ".git"))
   end
 

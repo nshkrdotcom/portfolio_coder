@@ -6,7 +6,8 @@ config :portfolio_coder,
 config :portfolio_manager,
   env: :test,
   start_repo: false,
-  start_router: false
+  start_router: false,
+  manifest: %{}
 
 config :portfolio_index,
   start_repo: false,

@@ -35,7 +35,7 @@ defmodule PortfolioCoder.Review.PRReviewerTest do
 
   @large_diff """
               diff --git a/lib/module.ex b/lib/module.ex
-              """ <> (1..200 |> Enum.map(fn i -> "+def func#{i}, do: :ok\n" end) |> Enum.join())
+              """ <> Enum.map_join(1..200, "", fn i -> "+def func#{i}, do: :ok\n" end)
 
   describe "new/1" do
     test "creates a PR reviewer" do
@@ -138,7 +138,7 @@ defmodule PortfolioCoder.Review.PRReviewerTest do
       reviewer = PRReviewer.new(checks: [:complexity], max_lines: 100)
       {:ok, review} = PRReviewer.review(reviewer, @large_diff)
 
-      assert review.status == :request_changes or length(review.comments) > 0
+      assert review.status == :request_changes or review.comments != []
       assert Enum.any?(review.comments, &String.contains?(&1.message, "Large PR"))
     end
 

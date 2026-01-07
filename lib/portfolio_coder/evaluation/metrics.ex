@@ -124,23 +124,28 @@ defmodule PortfolioCoder.Evaluation.Metrics do
   """
   @spec average_precision([doc_id()], MapSet.t()) :: float()
   def average_precision(retrieved, relevant) do
-    if MapSet.size(relevant) == 0 do
+    relevant_count = MapSet.size(relevant)
+
+    if relevant_count == 0 do
       0.0
     else
-      {precision_sum, _} =
-        retrieved
-        |> Enum.with_index(1)
-        |> Enum.reduce({0.0, 0}, fn {doc, k}, {sum, rel_count} ->
-          if MapSet.member?(relevant, doc) do
-            new_rel_count = rel_count + 1
-            precision = new_rel_count / k
-            {sum + precision, new_rel_count}
-          else
-            {sum, rel_count}
-          end
-        end)
+      precision_sum(retrieved, relevant) / relevant_count
+    end
+  end
 
-      precision_sum / MapSet.size(relevant)
+  defp precision_sum(retrieved, relevant) do
+    retrieved
+    |> Enum.with_index(1)
+    |> Enum.reduce({0.0, 0}, &update_precision_sum(relevant, &1, &2))
+    |> elem(0)
+  end
+
+  defp update_precision_sum(relevant, {doc, k}, {sum, rel_count}) do
+    if MapSet.member?(relevant, doc) do
+      new_rel_count = rel_count + 1
+      {sum + new_rel_count / k, new_rel_count}
+    else
+      {sum, rel_count}
     end
   end
 

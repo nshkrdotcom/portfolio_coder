@@ -15,7 +15,7 @@ defmodule PortfolioCoder.Portfolio.Syncer do
 
   """
 
-  alias PortfolioCoder.Portfolio.{Registry, Context, Scanner}
+  alias PortfolioCoder.Portfolio.{Context, Registry, Scanner}
 
   @doc """
   Syncs all registered repositories.
@@ -26,31 +26,38 @@ defmodule PortfolioCoder.Portfolio.Syncer do
   def sync_all(opts \\ []) do
     case Registry.list_repos() do
       {:ok, repos} ->
-        results =
-          repos
-          |> maybe_filter_repos(opts)
-          |> Enum.map(fn repo ->
-            case sync_repo(repo.id, opts) do
-              {:ok, _} -> {:ok, repo.id}
-              {:error, reason} -> {:error, repo.id, reason}
-            end
-          end)
-
-        synced = Enum.count(results, &match?({:ok, _}, &1))
-        failed = Enum.count(results, &match?({:error, _, _}, &1))
-        errors = Enum.filter(results, &match?({:error, _, _}, &1))
-
-        {:ok,
-         %{
-           synced: synced,
-           failed: failed,
-           errors: errors,
-           total: length(repos)
-         }}
+        results = sync_repos(repos, opts)
+        {:ok, summarize_results(results, repos)}
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp sync_repos(repos, opts) do
+    repos
+    |> maybe_filter_repos(opts)
+    |> Enum.map(fn repo -> sync_repo_result(repo.id, opts) end)
+  end
+
+  defp sync_repo_result(repo_id, opts) do
+    case sync_repo(repo_id, opts) do
+      {:ok, _} -> {:ok, repo_id}
+      {:error, reason} -> {:error, repo_id, reason}
+    end
+  end
+
+  defp summarize_results(results, repos) do
+    synced = Enum.count(results, &match?({:ok, _}, &1))
+    failed = Enum.count(results, &match?({:error, _, _}, &1))
+    errors = Enum.filter(results, &match?({:error, _, _}, &1))
+
+    %{
+      synced: synced,
+      failed: failed,
+      errors: errors,
+      total: length(repos)
+    }
   end
 
   @doc """
@@ -110,7 +117,7 @@ defmodule PortfolioCoder.Portfolio.Syncer do
   """
   @spec get_git_info(String.t()) :: {:ok, map()} | {:error, term()}
   def get_git_info(repo_path) when is_binary(repo_path) do
-    if Scanner.is_git_repo?(repo_path) do
+    if Scanner.git_repo?(repo_path) do
       last_commit = get_last_commit(repo_path)
       commit_count = get_commit_count_30d(repo_path)
       branch = get_current_branch(repo_path)

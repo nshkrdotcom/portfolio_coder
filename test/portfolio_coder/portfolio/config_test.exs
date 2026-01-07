@@ -82,7 +82,7 @@ defmodule PortfolioCoder.Portfolio.ConfigTest do
     test "returns list of directories to scan", %{portfolio_path: portfolio_path} do
       dirs = Config.scan_directories()
       assert is_list(dirs)
-      assert length(dirs) > 0
+      assert dirs != []
       assert Enum.all?(dirs, &is_binary/1)
       # Should include the repos directory from our test config
       assert Enum.any?(dirs, &String.contains?(&1, portfolio_path))

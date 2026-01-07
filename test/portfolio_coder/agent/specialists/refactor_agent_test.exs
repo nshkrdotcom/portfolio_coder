@@ -1,10 +1,10 @@
 defmodule PortfolioCoder.Agent.Specialists.RefactorAgentTest do
   use ExUnit.Case, async: true
 
-  alias PortfolioCoder.Agent.Specialists.RefactorAgent
   alias PortfolioCoder.Agent.Session
-  alias PortfolioCoder.Indexer.InMemorySearch
+  alias PortfolioCoder.Agent.Specialists.RefactorAgent
   alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Indexer.InMemorySearch
 
   describe "new_session/1" do
     test "creates session with refactor agent type" do

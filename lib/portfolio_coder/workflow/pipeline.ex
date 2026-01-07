@@ -225,37 +225,38 @@ defmodule PortfolioCoder.Workflow.Pipeline do
   defp kahn_loop(queue, graph, in_degree, result, expected_count) do
     case :queue.out(queue) do
       {:empty, _} ->
-        if length(result) == expected_count do
-          {:ok, Enum.reverse(result)}
-        else
-          {:error, :cycle_detected}
-        end
+        finalize_kahn(result, expected_count)
 
       {{:value, node}, queue2} ->
         # Add to result
         result2 = [node | result]
 
-        # Decrease in-degree for all neighbors
-        neighbors = Map.get(graph, node, [])
-
-        {queue3, in_degree2} =
-          Enum.reduce(neighbors, {queue2, in_degree}, fn neighbor, {q, deg} ->
-            new_deg = Map.get(deg, neighbor, 0) - 1
-            deg2 = Map.put(deg, neighbor, new_deg)
-
-            q2 =
-              if new_deg == 0 do
-                :queue.in(neighbor, q)
-              else
-                q
-              end
-
-            {q2, deg2}
-          end)
-
+        {queue3, in_degree2} = process_neighbors(node, graph, queue2, in_degree)
         kahn_loop(queue3, graph, in_degree2, result2, expected_count)
     end
   end
+
+  defp finalize_kahn(result, expected_count) do
+    if length(result) == expected_count do
+      {:ok, Enum.reverse(result)}
+    else
+      {:error, :cycle_detected}
+    end
+  end
+
+  defp process_neighbors(node, graph, queue, in_degree) do
+    neighbors = Map.get(graph, node, [])
+
+    Enum.reduce(neighbors, {queue, in_degree}, fn neighbor, {q, deg} ->
+      new_deg = Map.get(deg, neighbor, 0) - 1
+      deg2 = Map.put(deg, neighbor, new_deg)
+      q2 = maybe_enqueue(q, neighbor, new_deg)
+      {q2, deg2}
+    end)
+  end
+
+  defp maybe_enqueue(queue, neighbor, 0), do: :queue.in(neighbor, queue)
+  defp maybe_enqueue(queue, _neighbor, _new_deg), do: queue
 
   defp execute_steps(steps, initial_context) do
     result = %{

@@ -194,22 +194,22 @@ defmodule PortfolioCoder.Portfolio.Registry do
     if Enum.empty?(repos) do
       "repos: []\n"
     else
-      repos_yaml = repos |> Enum.map(&encode_repo/1) |> Enum.join("")
+      repos_yaml = Enum.map_join(repos, "", &encode_repo/1)
       "repos:\n#{repos_yaml}"
     end
   end
 
   defp encode_repo(repo) when is_map(repo) do
-    id = Map.get(repo, :id) || Map.get(repo, "id")
-    name = Map.get(repo, :name) || Map.get(repo, "name")
-    path = Map.get(repo, :path) || Map.get(repo, "path")
-    language = Map.get(repo, :language) || Map.get(repo, "language")
-    type = Map.get(repo, :type) || Map.get(repo, "type")
-    status = Map.get(repo, :status) || Map.get(repo, "status")
-    remote_url = Map.get(repo, :remote_url) || Map.get(repo, "remote_url")
-    tags = Map.get(repo, :tags) || Map.get(repo, "tags") || []
-    created_at = Map.get(repo, :created_at) || Map.get(repo, "created_at")
-    updated_at = Map.get(repo, :updated_at) || Map.get(repo, "updated_at")
+    id = repo_value(repo, :id)
+    name = repo_value(repo, :name)
+    path = repo_value(repo, :path)
+    language = repo_value(repo, :language)
+    type = repo_value(repo, :type)
+    status = repo_value(repo, :status)
+    remote_url = repo_value(repo, :remote_url)
+    tags = repo_value(repo, :tags) || []
+    created_at = repo_value(repo, :created_at)
+    updated_at = repo_value(repo, :updated_at)
 
     tags_str = if tags == [], do: "[]", else: "[#{Enum.join(tags, ", ")}]"
 
@@ -230,6 +230,10 @@ defmodule PortfolioCoder.Portfolio.Registry do
   defp format_datetime(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp format_datetime(str) when is_binary(str), do: str
   defp format_datetime(_), do: DateTime.to_iso8601(DateTime.utc_now())
+
+  defp repo_value(repo, key) do
+    Map.get(repo, key) || Map.get(repo, Atom.to_string(key))
+  end
 
   defp parse_repo(data) when is_map(data) do
     %{
@@ -317,9 +321,7 @@ defmodule PortfolioCoder.Portfolio.Registry do
           data
           |> Map.get("repos", [])
           |> Enum.map(&parse_repo/1)
-          |> Enum.map(fn repo ->
-            if repo.id == id, do: updated_repo, else: repo
-          end)
+          |> Enum.map(&replace_repo(&1, id, updated_repo))
 
         save_registry(Map.put(data, "repos", repos))
 
@@ -342,6 +344,10 @@ defmodule PortfolioCoder.Portfolio.Registry do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp replace_repo(repo, id, updated_repo) do
+    if repo.id == id, do: updated_repo, else: repo
   end
 
   defp maybe_limit(repos, nil), do: repos

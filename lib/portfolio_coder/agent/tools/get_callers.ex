@@ -5,8 +5,8 @@ defmodule PortfolioCoder.Agent.Tools.GetCallers do
 
   @behaviour PortfolioCoder.Agent.Tool
 
-  alias PortfolioCoder.Graph.InMemoryGraph
   alias PortfolioCoder.Graph.CallGraph
+  alias PortfolioCoder.Graph.InMemoryGraph
 
   @impl true
   def name, do: :get_callers

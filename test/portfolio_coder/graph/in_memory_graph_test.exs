@@ -280,11 +280,11 @@ defmodule PortfolioCoder.Graph.InMemoryGraphTest do
 
       # Should have external nodes for imports
       {:ok, external_nodes} = InMemoryGraph.nodes_by_type(graph, :external)
-      assert length(external_nodes) >= 1
+      assert external_nodes != []
 
       # Module should have imports
       {:ok, imports} = InMemoryGraph.imports_of(graph, "MyApp.User")
-      assert length(imports) >= 1
+      assert imports != []
     end
   end
 end

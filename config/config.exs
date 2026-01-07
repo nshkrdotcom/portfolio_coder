@@ -19,4 +19,15 @@ config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# Hammer rate limiter config (required by portfolio_index dependency)
+config :hammer,
+  backend:
+    {Hammer.Backend.ETS,
+     [
+       # 2 hours
+       expiry_ms: 60_000 * 60 * 2,
+       # 10 minutes
+       cleanup_interval_ms: 60_000 * 10
+     ]}
+
 import_config "#{config_env()}.exs"

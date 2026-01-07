@@ -1,10 +1,10 @@
 defmodule PortfolioCoder.Agent.Specialists.DebugAgentTest do
   use ExUnit.Case, async: true
 
-  alias PortfolioCoder.Agent.Specialists.DebugAgent
   alias PortfolioCoder.Agent.Session
-  alias PortfolioCoder.Indexer.InMemorySearch
+  alias PortfolioCoder.Agent.Specialists.DebugAgent
   alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Indexer.InMemorySearch
 
   describe "new_session/1" do
     test "creates session with debug agent type" do
@@ -111,7 +111,7 @@ defmodule PortfolioCoder.Agent.Specialists.DebugAgentTest do
       {:ok, trace, _session} = DebugAgent.trace_code_path(session, "cycle_a/0")
 
       assert trace.involved_in_cycle == true
-      assert length(trace.cycles) > 0
+      assert trace.cycles != []
     end
 
     test "returns error when no graph" do

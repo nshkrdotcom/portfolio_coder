@@ -68,7 +68,7 @@ defmodule PortfolioCoder.Portfolio.ScannerTest do
       PortfolioFixtures.create_test_repo(repos_dir, "single_dir_test", language: :elixir)
 
       assert {:ok, results} = Scanner.scan_directory(repos_dir)
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "excludes directories matching patterns", %{portfolio_path: portfolio_path} do
@@ -154,19 +154,19 @@ defmodule PortfolioCoder.Portfolio.ScannerTest do
     end
   end
 
-  describe "is_git_repo?/1" do
+  describe "git_repo?/1" do
     test "returns true for git repos", %{portfolio_path: portfolio_path} do
       repos_dir = Path.join(portfolio_path, "repos")
       repo_path = PortfolioFixtures.create_test_repo(repos_dir, "git_repo", language: :elixir)
 
-      assert Scanner.is_git_repo?(repo_path) == true
+      assert Scanner.git_repo?(repo_path) == true
     end
 
     test "returns false for non-git directories", %{portfolio_path: portfolio_path} do
       non_git = Path.join([portfolio_path, "not_a_repo"])
       File.mkdir_p!(non_git)
 
-      assert Scanner.is_git_repo?(non_git) == false
+      assert Scanner.git_repo?(non_git) == false
     end
   end
 

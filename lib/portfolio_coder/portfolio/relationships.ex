@@ -98,17 +98,21 @@ defmodule PortfolioCoder.Portfolio.Relationships do
   def remove(from, to) when is_binary(from) and is_binary(to) do
     case list() do
       {:ok, rels} ->
-        matching = Enum.filter(rels, fn r -> r.from == from and r.to == to end)
-
-        if Enum.empty?(matching) do
-          {:error, :not_found}
-        else
-          filtered = Enum.reject(rels, fn r -> r.from == from and r.to == to end)
-          save_relationships(filtered)
-        end
+        remove_from_relationships(rels, from, to)
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp remove_from_relationships(rels, from, to) do
+    matching = Enum.filter(rels, fn r -> r.from == from and r.to == to end)
+
+    if Enum.empty?(matching) do
+      {:error, :not_found}
+    else
+      filtered = Enum.reject(rels, fn r -> r.from == from and r.to == to end)
+      save_relationships(filtered)
     end
   end
 
@@ -222,10 +226,7 @@ defmodule PortfolioCoder.Portfolio.Relationships do
     if Enum.empty?(rels) do
       "relationships: []\n"
     else
-      items =
-        rels
-        |> Enum.map(&encode_relationship/1)
-        |> Enum.join("")
+      items = Enum.map_join(rels, "", &encode_relationship/1)
 
       "relationships:\n#{items}"
     end
@@ -246,9 +247,7 @@ defmodule PortfolioCoder.Portfolio.Relationships do
 
     if rel.details && map_size(rel.details) > 0 do
       details =
-        rel.details
-        |> Enum.map(fn {k, v} -> "      #{k}: #{v}" end)
-        |> Enum.join("\n")
+        Enum.map_join(rel.details, "\n", fn {k, v} -> "      #{k}: #{v}" end)
 
       base <> "    details:\n#{details}\n"
     else

@@ -3,8 +3,8 @@ defmodule PortfolioCoder.Agent.CodeAgentTest do
 
   alias PortfolioCoder.Agent.CodeAgent
   alias PortfolioCoder.Agent.Session
-  alias PortfolioCoder.Indexer.InMemorySearch
   alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Indexer.InMemorySearch
 
   describe "new_session/1" do
     test "creates a session with provided context" do

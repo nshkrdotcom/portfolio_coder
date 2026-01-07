@@ -42,7 +42,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
     test "generates test cases from Elixir code" do
       {:ok, test_cases} = TestGenerator.from_code(@sample_code, language: :elixir)
 
-      assert length(test_cases) > 0
+      assert test_cases != []
       assert Enum.all?(test_cases, &Map.has_key?(&1, :question))
       assert Enum.all?(test_cases, &Map.has_key?(&1, :context))
       assert Enum.all?(test_cases, &Map.has_key?(&1, :expected_answer))
@@ -65,7 +65,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
       {:ok, test_cases} = TestGenerator.from_code(@sample_code)
 
       module_cases = Enum.filter(test_cases, &(&1.metadata.type == :module))
-      assert length(module_cases) >= 1
+      assert module_cases != []
 
       calc_case = Enum.find(module_cases, &String.contains?(&1.question, "Calculator"))
       assert calc_case != nil
@@ -75,7 +75,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
       {:ok, test_cases} = TestGenerator.from_code(@sample_code)
 
       function_cases = Enum.filter(test_cases, &(&1.metadata.type == :function))
-      assert length(function_cases) >= 1
+      assert function_cases != []
     end
   end
 
@@ -83,7 +83,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
     test "generates test cases from markdown" do
       {:ok, test_cases} = TestGenerator.from_docs(@sample_markdown)
 
-      assert length(test_cases) > 0
+      assert test_cases != []
       assert Enum.all?(test_cases, &(&1.metadata.type == :documentation))
     end
 
@@ -116,7 +116,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
 
       {:ok, adversarial_cases} = TestGenerator.adversarial(base_cases)
 
-      assert length(adversarial_cases) >= 1
+      assert adversarial_cases != []
     end
 
     test "generates paraphrased questions" do
@@ -175,7 +175,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
     test "generates edge case test cases" do
       {:ok, edge_cases} = TestGenerator.edge_cases()
 
-      assert length(edge_cases) > 0
+      assert edge_cases != []
       assert Enum.all?(edge_cases, &(&1.metadata.type == :edge_case))
     end
 
@@ -240,7 +240,7 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
     test "generates combined dataset" do
       {:ok, dataset} = TestGenerator.golden_dataset(@sample_code, language: :elixir)
 
-      assert length(dataset) > 0
+      assert dataset != []
 
       # Should have IDs
       assert Enum.all?(dataset, &Map.has_key?(&1, :id))
@@ -254,14 +254,14 @@ defmodule PortfolioCoder.Evaluation.TestGeneratorTest do
       {:ok, dataset} = TestGenerator.golden_dataset(@sample_code)
 
       code_cases = Enum.filter(dataset, &(&1.metadata.type in [:module, :function]))
-      assert length(code_cases) > 0
+      assert code_cases != []
     end
 
     test "includes edge cases" do
       {:ok, dataset} = TestGenerator.golden_dataset(@sample_code)
 
       edge_cases = Enum.filter(dataset, &(&1.metadata.type == :edge_case))
-      assert length(edge_cases) > 0
+      assert edge_cases != []
     end
   end
 end

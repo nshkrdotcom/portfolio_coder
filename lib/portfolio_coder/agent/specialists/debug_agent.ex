@@ -21,9 +21,10 @@ defmodule PortfolioCoder.Agent.Specialists.DebugAgent do
       {:ok, trace, session} = DebugAgent.trace_code_path(session, "MyModule.failing_func/1")
   """
 
-  alias PortfolioCoder.Agent.Session
   alias PortfolioCoder.Agent.CodeAgent
+  alias PortfolioCoder.Agent.Session
   alias PortfolioCoder.Graph.CallGraph
+  alias PortfolioCoder.Graph.InMemoryGraph
 
   @doc """
   Create a new debug session with specialized context.
@@ -93,14 +94,14 @@ defmodule PortfolioCoder.Agent.Specialists.DebugAgent do
           if include_transitive do
             CallGraph.transitive_callers(graph, function_id, max_depth: max_depth)
           else
-            PortfolioCoder.Graph.InMemoryGraph.callers(graph, function_id)
+            InMemoryGraph.callers(graph, function_id)
           end
 
         callees_result =
           if include_transitive do
             CallGraph.transitive_callees(graph, function_id, max_depth: max_depth)
           else
-            PortfolioCoder.Graph.InMemoryGraph.callees(graph, function_id)
+            InMemoryGraph.callees(graph, function_id)
           end
 
         {:ok, callers} = callers_result
@@ -179,8 +180,8 @@ defmodule PortfolioCoder.Agent.Specialists.DebugAgent do
 
       graph ->
         # Get function details
-        {:ok, callers} = PortfolioCoder.Graph.InMemoryGraph.callers(graph, function_id)
-        {:ok, callees} = PortfolioCoder.Graph.InMemoryGraph.callees(graph, function_id)
+        {:ok, callers} = InMemoryGraph.callers(graph, function_id)
+        {:ok, callees} = InMemoryGraph.callees(graph, function_id)
 
         # Calculate complexity indicators
         depth =
@@ -244,33 +245,26 @@ defmodule PortfolioCoder.Agent.Specialists.DebugAgent do
   defp classify_error_type(message) do
     message_lower = String.downcase(message)
 
-    cond do
-      String.contains?(message_lower, "undefined") ->
-        :undefined_error
+    Enum.find_value(error_matchers(), :unknown, fn {type, matcher} ->
+      if matcher.(message_lower), do: type, else: nil
+    end)
+  end
 
-      String.contains?(message_lower, "argument error") ->
-        :argument_error
+  defp error_matchers do
+    [
+      {:undefined_error, &String.contains?(&1, "undefined")},
+      {:argument_error, &String.contains?(&1, "argument error")},
+      {:function_clause_error, &String.contains?(&1, "function clause")},
+      {:match_error, &match_error_message?/1},
+      {:key_error, &String.contains?(&1, "key")},
+      {:timeout_error, &String.contains?(&1, "timeout")},
+      {:nil_error, &String.contains?(&1, "nil")}
+    ]
+  end
 
-      String.contains?(message_lower, "function clause") ->
-        :function_clause_error
-
-      String.contains?(message_lower, "matcherror") or
-          (String.contains?(message_lower, "match") and
-             not String.contains?(message_lower, "clause")) ->
-        :match_error
-
-      String.contains?(message_lower, "key") ->
-        :key_error
-
-      String.contains?(message_lower, "timeout") ->
-        :timeout_error
-
-      String.contains?(message_lower, "nil") ->
-        :nil_error
-
-      true ->
-        :unknown
-    end
+  defp match_error_message?(message) do
+    String.contains?(message, "matcherror") or
+      (String.contains?(message, "match") and not String.contains?(message, "clause"))
   end
 
   defp extract_keywords(message) do
@@ -322,10 +316,10 @@ defmodule PortfolioCoder.Agent.Specialists.DebugAgent do
           suggestions
       end
 
-    if length(search_results) > 0 do
-      ["Review related code in search results" | suggestions]
-    else
+    if search_results == [] do
       suggestions
+    else
+      ["Review related code in search results" | suggestions]
     end
   end
 

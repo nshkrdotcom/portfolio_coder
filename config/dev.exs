@@ -12,6 +12,7 @@ config :portfolio_index,
 
 config :portfolio_manager,
   start_repo: false,
-  start_router: false
+  start_router: false,
+  manifest: %{}
 
 config :logger, level: :debug

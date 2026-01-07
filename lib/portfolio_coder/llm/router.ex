@@ -323,11 +323,9 @@ defmodule PortfolioCoder.LLM.Router do
 
     # Filter by health and quality
     eligible =
-      router.providers
-      |> Enum.filter(&provider_healthy?(router, &1))
-      |> Enum.filter(fn provider ->
-        quality = Map.get(router.quality, provider, 1.0)
-        quality >= min_quality
+      Enum.filter(router.providers, fn provider ->
+        provider_healthy?(router, provider) and
+          Map.get(router.quality, provider, 1.0) >= min_quality
       end)
 
     if eligible == [] do

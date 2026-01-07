@@ -1,7 +1,7 @@
 defmodule PortfolioCoder.Portfolio.SyncerTest do
   use ExUnit.Case, async: false
 
-  alias PortfolioCoder.Portfolio.{Syncer, Registry, Context}
+  alias PortfolioCoder.Portfolio.{Context, Registry, Syncer}
   alias PortfolioCoder.PortfolioFixtures
 
   setup do
@@ -55,7 +55,10 @@ defmodule PortfolioCoder.Portfolio.SyncerTest do
             "commit",
             "-m",
             "Initial commit"
-          ], cd: repo_path, stderr_to_stdout: true)
+          ],
+          cd: repo_path,
+          stderr_to_stdout: true
+        )
 
       # Register the repo
       {:ok, _} =
@@ -97,7 +100,10 @@ defmodule PortfolioCoder.Portfolio.SyncerTest do
             "commit",
             "-m",
             "Test commit"
-          ], cd: repo_path, stderr_to_stdout: true)
+          ],
+          cd: repo_path,
+          stderr_to_stdout: true
+        )
 
       assert {:ok, info} = Syncer.get_git_info(repo_path)
       assert info.last_commit != nil

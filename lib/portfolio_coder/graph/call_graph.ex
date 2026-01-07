@@ -81,14 +81,11 @@ defmodule PortfolioCoder.Graph.CallGraph do
 
     cycles =
       function_ids
-      |> Enum.reduce([], fn func_id, acc ->
+      |> Enum.reduce_while([], fn func_id, acc ->
         if length(acc) >= max_cycles do
-          acc
+          {:halt, acc}
         else
-          case find_cycle_from(graph, func_id) do
-            nil -> acc
-            cycle -> [cycle | acc]
-          end
+          {:cont, maybe_add_cycle(graph, func_id, acc)}
         end
       end)
       |> Enum.uniq_by(&Enum.sort/1)
@@ -272,23 +269,8 @@ defmodule PortfolioCoder.Graph.CallGraph do
     # A node is in an SCC if there's a cycle including it
     sccs =
       function_ids
-      |> Enum.reduce({MapSet.new(), []}, fn func_id, {processed, components} ->
-        if MapSet.member?(processed, func_id) do
-          {processed, components}
-        else
-          # Check if this function is part of a cycle
-          case find_scc_from(graph, func_id, processed) do
-            nil ->
-              {MapSet.put(processed, func_id), components}
-
-            scc when is_list(scc) and length(scc) > 1 ->
-              new_processed = Enum.reduce(scc, processed, &MapSet.put(&2, &1))
-              {new_processed, [scc | components]}
-
-            _ ->
-              {MapSet.put(processed, func_id), components}
-          end
-        end
+      |> Enum.reduce({MapSet.new(), []}, fn func_id, acc ->
+        accumulate_scc(graph, func_id, acc)
       end)
       |> elem(1)
       |> Enum.uniq_by(&Enum.sort/1)
@@ -299,22 +281,15 @@ defmodule PortfolioCoder.Graph.CallGraph do
   # Private helpers
 
   defp traverse_callees(graph, function_id, visited, depth, max_depth) do
-    if MapSet.member?(visited, function_id) do
-      visited
-    else
-      visited = MapSet.put(visited, function_id)
-      {:ok, direct_callees} = InMemoryGraph.callees(graph, function_id)
+    cond do
+      MapSet.member?(visited, function_id) ->
+        visited
 
-      if depth >= max_depth do
-        # At max depth, add direct callees but don't recurse further
-        Enum.reduce(direct_callees, visited, fn callee_id, acc ->
-          MapSet.put(acc, callee_id)
-        end)
-      else
-        Enum.reduce(direct_callees, visited, fn callee_id, acc ->
-          traverse_callees(graph, callee_id, acc, depth + 1, max_depth)
-        end)
-      end
+      depth >= max_depth ->
+        add_direct_callees(graph, function_id, MapSet.put(visited, function_id))
+
+      true ->
+        traverse_callees_recursive(graph, function_id, visited, depth, max_depth)
     end
   end
 
@@ -391,21 +366,77 @@ defmodule PortfolioCoder.Graph.CallGraph do
     if Map.has_key?(visited, function_id) do
       :cycle
     else
-      {:ok, callees} = InMemoryGraph.callees(graph, function_id)
-
-      if callees == [] do
-        {:ok, 0}
-      else
-        visited = Map.put(visited, function_id, true)
-
-        callees
-        |> Enum.reduce_while({:ok, 0}, fn callee_id, {:ok, max_depth} ->
-          case calculate_depth(graph, callee_id, visited) do
-            {:ok, depth} -> {:cont, {:ok, max(max_depth, depth + 1)}}
-            :cycle -> {:halt, :cycle}
-          end
-        end)
-      end
+      do_calculate_depth(graph, function_id, visited)
     end
+  end
+
+  defp maybe_add_cycle(graph, func_id, acc) do
+    case find_cycle_from(graph, func_id) do
+      nil -> acc
+      cycle -> [cycle | acc]
+    end
+  end
+
+  defp accumulate_scc(graph, func_id, {processed, components}) do
+    case MapSet.member?(processed, func_id) do
+      true ->
+        {processed, components}
+
+      false ->
+        add_new_scc(graph, func_id, processed, components)
+    end
+  end
+
+  defp add_new_scc(graph, func_id, processed, components) do
+    case find_scc_from(graph, func_id, processed) do
+      nil ->
+        {MapSet.put(processed, func_id), components}
+
+      scc when is_list(scc) and length(scc) > 1 ->
+        new_processed = Enum.reduce(scc, processed, &MapSet.put(&2, &1))
+        {new_processed, [scc | components]}
+
+      _ ->
+        {MapSet.put(processed, func_id), components}
+    end
+  end
+
+  defp add_direct_callees(graph, function_id, visited) do
+    {:ok, direct_callees} = InMemoryGraph.callees(graph, function_id)
+
+    Enum.reduce(direct_callees, visited, fn callee_id, acc ->
+      MapSet.put(acc, callee_id)
+    end)
+  end
+
+  defp traverse_callees_recursive(graph, function_id, visited, depth, max_depth) do
+    {:ok, direct_callees} = InMemoryGraph.callees(graph, function_id)
+    visited = MapSet.put(visited, function_id)
+
+    Enum.reduce(direct_callees, visited, fn callee_id, acc ->
+      traverse_callees(graph, callee_id, acc, depth + 1, max_depth)
+    end)
+  end
+
+  defp do_calculate_depth(graph, function_id, visited) do
+    {:ok, callees} = InMemoryGraph.callees(graph, function_id)
+
+    case callees do
+      [] ->
+        {:ok, 0}
+
+      _ ->
+        visited = Map.put(visited, function_id, true)
+        calculate_depth_for_callees(graph, callees, visited)
+    end
+  end
+
+  defp calculate_depth_for_callees(graph, callees, visited) do
+    Enum.reduce_while(callees, {:ok, 0}, fn callee_id, {:ok, max_depth} ->
+      case calculate_depth(graph, callee_id, visited) do
+        {:ok, depth} -> {:cont, {:ok, max(max_depth, depth + 1)}}
+        :cycle -> {:halt, :cycle}
+      end
+    end)
   end
 end

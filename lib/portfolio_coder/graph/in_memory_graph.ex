@@ -397,174 +397,138 @@ defmodule PortfolioCoder.Graph.InMemoryGraph do
   # Private helpers
 
   defp do_add_from_parsed(state, parsed, file_path) do
-    # Add file node
-    file_id = file_path
+    file_node = build_file_node(parsed, file_path)
 
-    file_node = %{
-      id: file_id,
+    state
+    |> add_node_to_state(file_node)
+    |> add_symbols(parsed, file_node.id)
+    |> add_references(parsed)
+  end
+
+  defp build_file_node(parsed, file_path) do
+    %{
+      id: file_path,
       type: :file,
       name: Path.basename(file_path),
       metadata: %{path: file_path, language: parsed.language}
     }
+  end
 
-    state = add_node_to_state(state, file_node)
+  defp add_symbols(state, parsed, file_id) do
+    Enum.reduce(parsed.symbols, state, fn symbol, acc ->
+      add_symbol(acc, parsed.symbols, symbol, file_id)
+    end)
+  end
 
-    # Process symbols
-    state =
-      Enum.reduce(parsed.symbols, state, fn symbol, acc ->
-        case symbol.type do
-          :module ->
-            module_id = symbol.name
+  defp add_symbol(state, symbols, symbol, file_id) do
+    case symbol.type do
+      :module -> add_module_symbol(state, symbol, file_id)
+      :function -> add_function_symbol(state, symbols, symbol, file_id)
+      :class -> add_class_symbol(state, symbol, file_id)
+      _ -> state
+    end
+  end
 
-            module_node = %{
-              id: module_id,
-              type: :module,
-              name: symbol.name,
-              metadata: %{line: symbol.line, arity: symbol.arity, visibility: symbol.visibility}
-            }
+  defp add_module_symbol(state, symbol, file_id) do
+    module_id = symbol.name
 
-            acc = add_node_to_state(acc, module_node)
-
-            add_edge_to_state(acc, %{
-              source: file_id,
-              target: module_id,
-              type: :defines,
-              metadata: %{}
-            })
-
-          :function ->
-            func_id = build_function_id(parsed.symbols, symbol)
-
-            func_node = %{
-              id: func_id,
-              type: :function,
-              name: symbol.name,
-              metadata: %{line: symbol.line, arity: symbol.arity, visibility: symbol.visibility}
-            }
-
-            acc = add_node_to_state(acc, func_node)
-
-            # Find parent module and add defines edge
-            parent_module = find_parent_module(parsed.symbols, symbol)
-
-            if parent_module do
-              add_edge_to_state(acc, %{
-                source: parent_module,
-                target: func_id,
-                type: :defines,
-                metadata: %{}
-              })
-            else
-              add_edge_to_state(acc, %{
-                source: file_id,
-                target: func_id,
-                type: :defines,
-                metadata: %{}
-              })
-            end
-
-          :class ->
-            class_id = symbol.name
-
-            class_node = %{
-              id: class_id,
-              type: :class,
-              name: symbol.name,
-              metadata: %{line: symbol.line, visibility: symbol.visibility}
-            }
-
-            acc = add_node_to_state(acc, class_node)
-
-            add_edge_to_state(acc, %{
-              source: file_id,
-              target: class_id,
-              type: :defines,
-              metadata: %{}
-            })
-
-          _ ->
-            acc
-        end
-      end)
-
-    # Process references
-    state =
-      Enum.reduce(parsed.references, state, fn ref, acc ->
-        source_module = find_module_at_line(parsed.symbols, ref.line)
-
-        case ref.type do
-          :import ->
-            target_id = ref.module
-            # Ensure target node exists (as external if not in graph)
-            acc =
-              if not Map.has_key?(acc.nodes, target_id) do
-                ext_node = %{id: target_id, type: :external, name: target_id, metadata: %{}}
-                add_node_to_state(acc, ext_node)
-              else
-                acc
-              end
-
-            if source_module do
-              add_edge_to_state(acc, %{
-                source: source_module,
-                target: target_id,
-                type: :imports,
-                metadata: %{line: ref.line}
-              })
-            else
-              acc
-            end
-
-          :use ->
-            target_id = ref.module
-
-            acc =
-              if not Map.has_key?(acc.nodes, target_id) do
-                ext_node = %{id: target_id, type: :external, name: target_id, metadata: %{}}
-                add_node_to_state(acc, ext_node)
-              else
-                acc
-              end
-
-            if source_module do
-              add_edge_to_state(acc, %{
-                source: source_module,
-                target: target_id,
-                type: :uses,
-                metadata: %{line: ref.line}
-              })
-            else
-              acc
-            end
-
-          :alias ->
-            target_id = ref.module
-
-            acc =
-              if not Map.has_key?(acc.nodes, target_id) do
-                ext_node = %{id: target_id, type: :external, name: target_id, metadata: %{}}
-                add_node_to_state(acc, ext_node)
-              else
-                acc
-              end
-
-            if source_module do
-              add_edge_to_state(acc, %{
-                source: source_module,
-                target: target_id,
-                type: :alias,
-                metadata: %{line: ref.line}
-              })
-            else
-              acc
-            end
-
-          _ ->
-            acc
-        end
-      end)
+    module_node = %{
+      id: module_id,
+      type: :module,
+      name: symbol.name,
+      metadata: %{line: symbol.line, arity: symbol.arity, visibility: symbol.visibility}
+    }
 
     state
+    |> add_node_to_state(module_node)
+    |> add_edge_to_state(%{
+      source: file_id,
+      target: module_id,
+      type: :defines,
+      metadata: %{}
+    })
+  end
+
+  defp add_function_symbol(state, symbols, symbol, file_id) do
+    func_id = build_function_id(symbols, symbol)
+
+    func_node = %{
+      id: func_id,
+      type: :function,
+      name: symbol.name,
+      metadata: %{line: symbol.line, arity: symbol.arity, visibility: symbol.visibility}
+    }
+
+    parent_module = find_parent_module(symbols, symbol)
+    source = parent_module || file_id
+
+    state
+    |> add_node_to_state(func_node)
+    |> add_edge_to_state(%{
+      source: source,
+      target: func_id,
+      type: :defines,
+      metadata: %{}
+    })
+  end
+
+  defp add_class_symbol(state, symbol, file_id) do
+    class_id = symbol.name
+
+    class_node = %{
+      id: class_id,
+      type: :class,
+      name: symbol.name,
+      metadata: %{line: symbol.line, visibility: symbol.visibility}
+    }
+
+    state
+    |> add_node_to_state(class_node)
+    |> add_edge_to_state(%{
+      source: file_id,
+      target: class_id,
+      type: :defines,
+      metadata: %{}
+    })
+  end
+
+  defp add_references(state, parsed) do
+    Enum.reduce(parsed.references, state, fn ref, acc ->
+      add_reference(acc, parsed.symbols, ref)
+    end)
+  end
+
+  defp add_reference(state, symbols, ref) do
+    source_module = find_module_at_line(symbols, ref.line)
+
+    case ref.type do
+      :import -> add_module_reference(state, source_module, ref.module, :imports, ref.line)
+      :use -> add_module_reference(state, source_module, ref.module, :uses, ref.line)
+      :alias -> add_module_reference(state, source_module, ref.module, :alias, ref.line)
+      _ -> state
+    end
+  end
+
+  defp add_module_reference(state, nil, _target_id, _edge_type, _line), do: state
+
+  defp add_module_reference(state, source_module, target_id, edge_type, line) do
+    state
+    |> ensure_external_node(target_id)
+    |> add_edge_to_state(%{
+      source: source_module,
+      target: target_id,
+      type: edge_type,
+      metadata: %{line: line}
+    })
+  end
+
+  defp ensure_external_node(state, target_id) do
+    if Map.has_key?(state.nodes, target_id) do
+      state
+    else
+      ext_node = %{id: target_id, type: :external, name: target_id, metadata: %{}}
+      add_node_to_state(state, ext_node)
+    end
   end
 
   defp add_node_to_state(state, node) do
@@ -628,22 +592,28 @@ defmodule PortfolioCoder.Graph.InMemoryGraph do
   defp do_bfs(_state, [], _visited, _to, _max_depth), do: {:error, :no_path}
 
   defp do_bfs(state, [{current, path} | rest], visited, to, max_depth) do
-    if current == to do
-      {:ok, Enum.reverse(path)}
-    else
-      if length(path) >= max_depth do
+    cond do
+      current == to ->
+        {:ok, Enum.reverse(path)}
+
+      length(path) >= max_depth ->
         do_bfs(state, rest, visited, to, max_depth)
-      else
-        neighbors =
-          Map.get(state.outgoing_index, current, [])
-          |> Enum.map(fn e -> e.target end)
-          |> Enum.reject(fn n -> MapSet.member?(visited, n) end)
 
-        new_visited = Enum.reduce(neighbors, visited, &MapSet.put(&2, &1))
-        new_items = Enum.map(neighbors, fn n -> {n, [n | path]} end)
-
-        do_bfs(state, rest ++ new_items, new_visited, to, max_depth)
-      end
+      true ->
+        {new_queue, new_visited} = bfs_expand(state, current, path, rest, visited)
+        do_bfs(state, new_queue, new_visited, to, max_depth)
     end
+  end
+
+  defp bfs_expand(state, current, path, rest, visited) do
+    neighbors =
+      Map.get(state.outgoing_index, current, [])
+      |> Enum.map(fn e -> e.target end)
+      |> Enum.reject(fn n -> MapSet.member?(visited, n) end)
+
+    new_visited = Enum.reduce(neighbors, visited, &MapSet.put(&2, &1))
+    new_items = Enum.map(neighbors, fn n -> {n, [n | path]} end)
+
+    {rest ++ new_items, new_visited}
   end
 end

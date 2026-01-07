@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Portfolio.Add do
   """
   use Mix.Task
 
-  alias PortfolioCoder.Portfolio.{Config, Scanner, Registry, Context}
+  alias PortfolioCoder.Portfolio.{Config, Context, Registry, Scanner}
 
   @switches [id: :string, type: :string, status: :string]
 
@@ -43,16 +43,37 @@ defmodule Mix.Tasks.Portfolio.Add do
   end
 
   defp add_repo(path, opts) do
+    validate_repo_path!(path)
+    attrs = build_repo_attrs(path, opts)
+
+    case Registry.add_repo(attrs) do
+      {:ok, repo} ->
+        initialize_context(attrs)
+        print_repo(repo)
+
+      {:error, :already_exists} ->
+        Mix.shell().error("Repository '#{attrs.id}' already exists in registry")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        Mix.shell().error("Error adding repository: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  defp validate_repo_path!(path) do
     unless File.dir?(path) do
       Mix.shell().error("Path does not exist or is not a directory: #{path}")
       exit({:shutdown, 1})
     end
 
-    unless Scanner.is_git_repo?(path) do
+    unless Scanner.git_repo?(path) do
       Mix.shell().error("Path is not a git repository: #{path}")
       exit({:shutdown, 1})
     end
+  end
 
+  defp build_repo_attrs(path, opts) do
     name = Path.basename(path)
     id = opts[:id] || name
     language = Scanner.detect_language(path)
@@ -60,7 +81,7 @@ defmodule Mix.Tasks.Portfolio.Add do
     status = parse_status(opts[:status]) || :active
     remotes = Scanner.extract_remotes(path)
 
-    attrs = %{
+    %{
       id: id,
       name: name,
       path: path,
@@ -69,40 +90,33 @@ defmodule Mix.Tasks.Portfolio.Add do
       status: status,
       remote_url: get_primary_remote(remotes)
     }
+  end
 
-    case Registry.add_repo(attrs) do
-      {:ok, repo} ->
-        # Create context directory
-        Context.ensure_repo_dir(id)
+  defp initialize_context(attrs) do
+    # Create context directory
+    Context.ensure_repo_dir(attrs.id)
 
-        # Create initial context
-        initial_context = %{
-          "id" => id,
-          "name" => name,
-          "path" => path,
-          "language" => to_string(language),
-          "type" => to_string(type),
-          "status" => to_string(status),
-          "purpose" => "TODO: Add description",
-          "todos" => []
-        }
+    # Create initial context
+    initial_context = %{
+      "id" => attrs.id,
+      "name" => attrs.name,
+      "path" => attrs.path,
+      "language" => to_string(attrs.language),
+      "type" => to_string(attrs.type),
+      "status" => to_string(attrs.status),
+      "purpose" => "TODO: Add description",
+      "todos" => []
+    }
 
-        Context.save(id, initial_context)
+    Context.save(attrs.id, initial_context)
+  end
 
-        Mix.shell().info("Added repository: #{repo.id}")
-        Mix.shell().info("  Path:     #{repo.path}")
-        Mix.shell().info("  Language: #{repo.language}")
-        Mix.shell().info("  Type:     #{repo.type}")
-        Mix.shell().info("  Status:   #{repo.status}")
-
-      {:error, :already_exists} ->
-        Mix.shell().error("Repository '#{id}' already exists in registry")
-        exit({:shutdown, 1})
-
-      {:error, reason} ->
-        Mix.shell().error("Error adding repository: #{inspect(reason)}")
-        exit({:shutdown, 1})
-    end
+  defp print_repo(repo) do
+    Mix.shell().info("Added repository: #{repo.id}")
+    Mix.shell().info("  Path:     #{repo.path}")
+    Mix.shell().info("  Language: #{repo.language}")
+    Mix.shell().info("  Type:     #{repo.type}")
+    Mix.shell().info("  Status:   #{repo.status}")
   end
 
   defp parse_type(nil), do: nil

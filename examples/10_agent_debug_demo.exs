@@ -29,15 +29,6 @@ defmodule DebugAgentDemo do
   Provide a structured analysis with severity levels (info, warning, error).
   """
 
-  @fix_prompt """
-  Based on this analysis:
-  <%= analysis %>
-
-  For issue: <%= issue %>
-
-  Suggest a fix with code example.
-  """
-
   def run(file_path \\ nil) do
     print_header("Debug Agent Demo")
 

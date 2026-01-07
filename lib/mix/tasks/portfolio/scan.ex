@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Portfolio.Scan do
   """
   use Mix.Task
 
-  alias PortfolioCoder.Portfolio.{Config, Scanner, Registry}
+  alias PortfolioCoder.Portfolio.{Config, Registry, Scanner}
 
   @switches [add: :boolean, dry_run: :boolean]
   @aliases [n: :dry_run]
@@ -33,13 +33,20 @@ defmodule Mix.Tasks.Portfolio.Scan do
 
     {opts, dirs, _} = OptionParser.parse(args, switches: @switches, aliases: @aliases)
 
-    directories =
-      if Enum.empty?(dirs) do
-        Config.scan_directories()
-      else
-        Enum.map(dirs, &Config.expand_path/1)
-      end
+    directories = resolve_directories(dirs)
+    print_directories(directories)
 
+    {:ok, results} = Scanner.scan(directories: directories)
+    {new_repos, existing} = split_repos(results)
+
+    print_summary(results, new_repos, existing)
+    handle_new_repos(new_repos, opts)
+  end
+
+  defp resolve_directories([]), do: Config.scan_directories()
+  defp resolve_directories(dirs), do: Enum.map(dirs, &Config.expand_path/1)
+
+  defp print_directories(directories) do
     Mix.shell().info("Scanning directories:")
 
     for dir <- directories do
@@ -47,38 +54,47 @@ defmodule Mix.Tasks.Portfolio.Scan do
     end
 
     Mix.shell().info("")
+  end
 
-    {:ok, results} = Scanner.scan(directories: directories)
-
+  defp split_repos(results) do
     new_repos = Enum.filter(results, & &1.is_new)
     existing = Enum.reject(results, & &1.is_new)
+    {new_repos, existing}
+  end
 
+  defp print_summary(results, new_repos, existing) do
     Mix.shell().info("Found #{length(results)} repositories:")
     Mix.shell().info("  New:             #{length(new_repos)}")
     Mix.shell().info("  Already tracked: #{length(existing)}")
     Mix.shell().info("")
+  end
 
-    unless Enum.empty?(new_repos) do
-      Mix.shell().info("New repositories:")
+  defp handle_new_repos([], _opts), do: :ok
 
-      for repo <- new_repos do
-        lang = repo.language || "unknown"
-        type = repo.type || "unknown"
-        Mix.shell().info("  #{repo.name} (#{lang}, #{type})")
-        Mix.shell().info("    Path: #{repo.path}")
-      end
+  defp handle_new_repos(new_repos, opts) do
+    Mix.shell().info("New repositories:")
 
-      Mix.shell().info("")
+    for repo <- new_repos do
+      lang = repo.language || "unknown"
+      type = repo.type || "unknown"
+      Mix.shell().info("  #{repo.name} (#{lang}, #{type})")
+      Mix.shell().info("    Path: #{repo.path}")
+    end
 
-      if opts[:add] and not opts[:dry_run] do
+    Mix.shell().info("")
+    handle_add_option(new_repos, opts)
+  end
+
+  defp handle_add_option(new_repos, opts) do
+    cond do
+      Keyword.get(opts, :dry_run, false) ->
+        Mix.shell().info("(Dry run - no changes made)")
+
+      Keyword.get(opts, :add, false) ->
         add_repos(new_repos)
-      else
-        if opts[:dry_run] do
-          Mix.shell().info("(Dry run - no changes made)")
-        else
-          Mix.shell().info("Run with --add to add these to the registry")
-        end
-      end
+
+      true ->
+        Mix.shell().info("Run with --add to add these to the registry")
     end
   end
 

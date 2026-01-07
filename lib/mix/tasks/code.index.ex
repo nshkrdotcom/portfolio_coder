@@ -26,9 +26,9 @@ defmodule Mix.Tasks.Code.Index do
   """
   use Mix.Task
 
-  alias PortfolioCoder.Indexer.Parser
   alias PortfolioCoder.Indexer.CodeChunker
   alias PortfolioCoder.Indexer.InMemorySearch
+  alias PortfolioCoder.Indexer.Parser
 
   @shortdoc "Index a code repository"
 
@@ -68,12 +68,7 @@ defmodule Mix.Tasks.Code.Index do
 
   defp index_repo(path, opts) do
     path = Path.expand(path)
-
-    unless File.dir?(path) do
-      shell_error("Error: #{path} is not a directory")
-      exit({:shutdown, 1})
-    end
-
+    validate_repo_path!(path)
     shell_info("Indexing repository: #{path}")
 
     index_name = opts[:index] || "default"
@@ -81,62 +76,13 @@ defmodule Mix.Tasks.Code.Index do
     exclude = parse_list(opts[:exclude]) || @default_exclude
     chunk_size = opts[:chunk_size] || 800
 
-    # Find all source files
     extensions = languages_to_extensions(languages)
-
-    files =
-      path
-      |> Path.join("**/*")
-      |> Path.wildcard()
-      |> Enum.filter(fn file ->
-        File.regular?(file) and
-          has_extension?(file, extensions) and
-          not excluded?(file, exclude)
-      end)
-      |> Enum.sort()
+    files = find_source_files(path, extensions, exclude)
 
     shell_info("Found #{length(files)} files to index")
 
-    # Create or get the index
     {:ok, index} = get_or_create_index(index_name)
-
-    # Process files
-    {files_indexed, chunks_created} =
-      files
-      |> Enum.reduce({0, 0}, fn file, {f_count, c_count} ->
-        case Parser.parse(file) do
-          {:ok, parsed} ->
-            case CodeChunker.chunk_file(file, strategy: :hybrid, chunk_size: chunk_size) do
-              {:ok, chunks} ->
-                docs =
-                  chunks
-                  |> Enum.with_index()
-                  |> Enum.map(fn {chunk, idx} ->
-                    %{
-                      id: "#{Path.relative_to(file, path)}:#{idx}",
-                      content: chunk.content,
-                      metadata: %{
-                        path: file,
-                        relative_path: Path.relative_to(file, path),
-                        language: parsed.language,
-                        type: chunk.type,
-                        name: chunk.name
-                      }
-                    }
-                  end)
-
-                InMemorySearch.add_all(index, docs)
-                {f_count + 1, c_count + length(chunks)}
-
-              {:error, _} ->
-                {f_count + 1, c_count}
-            end
-
-          {:error, _} ->
-            {f_count, c_count}
-        end
-      end)
-
+    {files_indexed, chunks_created} = index_files(files, index, path, chunk_size)
     stats = InMemorySearch.stats(index)
 
     shell_info("""
@@ -149,6 +95,78 @@ defmodule Mix.Tasks.Code.Index do
       Index name: #{index_name}
       Languages: #{inspect(languages)}
     """)
+  end
+
+  defp validate_repo_path!(path) do
+    unless File.dir?(path) do
+      shell_error("Error: #{path} is not a directory")
+      exit({:shutdown, 1})
+    end
+  end
+
+  defp find_source_files(path, extensions, exclude) do
+    path
+    |> Path.join("**/*")
+    |> Path.wildcard()
+    |> Enum.filter(fn file ->
+      File.regular?(file) and
+        has_extension?(file, extensions) and
+        not excluded?(file, exclude)
+    end)
+    |> Enum.sort()
+  end
+
+  defp index_files(files, index, root_path, chunk_size) do
+    Enum.reduce(files, {0, 0}, fn file, {file_count, chunk_count} ->
+      case index_file(file, index, root_path, chunk_size) do
+        {:ok, chunks_added} ->
+          {file_count + 1, chunk_count + chunks_added}
+
+        :skip ->
+          {file_count, chunk_count}
+      end
+    end)
+  end
+
+  defp index_file(file, index, root_path, chunk_size) do
+    case Parser.parse(file) do
+      {:ok, parsed} ->
+        {:ok, maybe_index_chunks(file, parsed, index, root_path, chunk_size)}
+
+      {:error, _} ->
+        :skip
+    end
+  end
+
+  defp maybe_index_chunks(file, parsed, index, root_path, chunk_size) do
+    case CodeChunker.chunk_file(file, strategy: :hybrid, chunk_size: chunk_size) do
+      {:ok, chunks} ->
+        docs = build_docs(file, root_path, parsed, chunks)
+        InMemorySearch.add_all(index, docs)
+        length(chunks)
+
+      {:error, _} ->
+        0
+    end
+  end
+
+  defp build_docs(file, root_path, parsed, chunks) do
+    relative_path = Path.relative_to(file, root_path)
+
+    Enum.with_index(chunks)
+    |> Enum.map(fn {chunk, idx} ->
+      %{
+        id: "#{relative_path}:#{idx}",
+        content: chunk.content,
+        metadata: %{
+          path: file,
+          relative_path: relative_path,
+          language: parsed.language,
+          type: chunk.type,
+          name: chunk.name
+        }
+      }
+    end)
   end
 
   defp get_or_create_index(name) do

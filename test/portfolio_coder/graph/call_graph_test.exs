@@ -83,7 +83,7 @@ defmodule PortfolioCoder.Graph.CallGraphTest do
       {:ok, graph} = setup_cyclic_call_graph()
 
       {:ok, cycles} = CallGraph.find_cycles(graph)
-      assert length(cycles) > 0
+      assert cycles != []
 
       # Should find the cycle a -> b -> c -> a
       cycle_nodes = List.first(cycles) |> MapSet.new()
@@ -263,7 +263,7 @@ defmodule PortfolioCoder.Graph.CallGraphTest do
       {:ok, graph} = setup_cyclic_call_graph()
 
       {:ok, sccs} = CallGraph.strongly_connected_components(graph)
-      assert length(sccs) > 0
+      assert sccs != []
 
       # The cycle should form an SCC
       scc = List.first(sccs)

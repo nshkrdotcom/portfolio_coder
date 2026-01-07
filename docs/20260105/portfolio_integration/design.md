@@ -298,7 +298,7 @@ defmodule PortfolioCoder.Portfolio.Scanner do
   @spec detect_type(String.t()) :: atom() | nil
   @spec extract_remotes(String.t()) :: [map()]
   @spec extract_dependencies(String.t(), atom()) :: map()
-  @spec is_git_repo?(String.t()) :: boolean()
+  @spec git_repo?(String.t()) :: boolean()
 end
 ```
 

@@ -175,9 +175,7 @@ defmodule PortfolioCoder.Portfolio.Context do
   end
 
   defp encode_context_yaml(context) when is_map(context) do
-    context
-    |> Enum.map(&encode_yaml_field/1)
-    |> Enum.join("")
+    Enum.map_join(context, "", &encode_yaml_field/1)
   end
 
   defp encode_yaml_field({key, value}) when is_binary(value) do
@@ -192,16 +190,14 @@ defmodule PortfolioCoder.Portfolio.Context do
     if Enum.empty?(value) do
       "#{key}: []\n"
     else
-      items = Enum.map(value, &"  - #{encode_list_item(&1)}") |> Enum.join("\n")
+      items = Enum.map_join(value, "\n", &"  - #{encode_list_item(&1)}")
       "#{key}:\n#{items}\n"
     end
   end
 
   defp encode_yaml_field({key, value}) when is_map(value) do
     nested =
-      value
-      |> Enum.map(fn {k, v} -> "  #{k}: #{encode_value(v)}" end)
-      |> Enum.join("\n")
+      Enum.map_join(value, "\n", fn {k, v} -> "  #{k}: #{encode_value(v)}" end)
 
     "#{key}:\n#{nested}\n"
   end
@@ -223,7 +219,6 @@ defmodule PortfolioCoder.Portfolio.Context do
   defp indent_multiline(text) do
     text
     |> String.split("\n")
-    |> Enum.map(&"  #{&1}")
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", &"  #{&1}")
   end
 end

@@ -1,8 +1,9 @@
 defmodule PortfolioCoder.Workflow.WorkflowsTest do
   use ExUnit.Case, async: true
 
-  alias PortfolioCoder.Workflow.Workflows
   alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Indexer.InMemorySearch
+  alias PortfolioCoder.Workflow.Workflows
 
   @test_repo_path Path.join(System.tmp_dir!(), "workflow_test_repo_#{:rand.uniform(10000)}")
 
@@ -73,20 +74,16 @@ defmodule PortfolioCoder.Workflow.WorkflowsTest do
 
       # Search the index
       {:ok, search_results} =
-        PortfolioCoder.Indexer.InMemorySearch.search(
-          result.context.index,
-          "ModuleA",
-          limit: 5
-        )
+        InMemorySearch.search(result.context.index, "ModuleA", limit: 5)
 
-      assert length(search_results) > 0
+      assert search_results != []
     end
 
     test "builds code graph" do
       {:ok, result} = Workflows.analyze_repo(@test_repo_path)
 
       # Check graph has nodes
-      {:ok, nodes} = PortfolioCoder.Graph.InMemoryGraph.nodes_by_type(result.context.graph, :file)
+      {:ok, nodes} = InMemoryGraph.nodes_by_type(result.context.graph, :file)
       assert length(nodes) >= 2
     end
 
@@ -160,7 +157,7 @@ defmodule PortfolioCoder.Workflow.WorkflowsTest do
       medium_diff =
         """
         diff --git a/lib/a.ex b/lib/a.ex
-        """ <> (1..150 |> Enum.map(fn _ -> "+new line\n" end) |> Enum.join())
+        """ <> Enum.map_join(1..150, "", fn _ -> "+new line\n" end)
 
       {:ok, medium_result} = Workflows.review_code(medium_diff)
       assert medium_result.context.impact.risk_level == :medium

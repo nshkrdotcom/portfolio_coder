@@ -27,7 +27,7 @@ defmodule PortfolioCoder.Indexer.CodeChunkerTest do
       {:ok, chunks} = CodeChunker.chunk_content(code, language: :elixir, strategy: :function)
 
       assert is_list(chunks)
-      assert length(chunks) >= 1
+      assert chunks != []
 
       # Each chunk should have required fields
       for chunk <- chunks do
@@ -111,7 +111,7 @@ defmodule PortfolioCoder.Indexer.CodeChunkerTest do
 
       assert is_list(chunks)
       # Large function should be split
-      assert length(chunks) >= 1
+      assert chunks != []
     end
 
     test "lines strategy chunks by line count" do
@@ -137,7 +137,7 @@ defmodule PortfolioCoder.Indexer.CodeChunkerTest do
         )
 
       assert is_list(chunks)
-      assert length(chunks) >= 1
+      assert chunks != []
     end
   end
 

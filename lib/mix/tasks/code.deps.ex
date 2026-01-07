@@ -30,8 +30,8 @@ defmodule Mix.Tasks.Code.Deps do
   """
   use Mix.Task
 
-  alias PortfolioCoder.Indexer.Parser
   alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Indexer.Parser
 
   @shortdoc "Analyze code dependencies"
 
@@ -129,91 +129,81 @@ defmodule Mix.Tasks.Code.Deps do
   defp show_deps(entity, opts) do
     graph_name = opts[:graph] || "deps"
 
-    case get_graph(graph_name) do
-      {:ok, graph} ->
-        shell_info("Dependencies (imports) of #{entity}:\n")
-
-        {:ok, imports} = InMemoryGraph.imports_of(graph, entity)
-
-        if imports == [] do
-          shell_info("No dependencies found.")
-        else
-          Enum.each(imports, fn imp ->
-            shell_info("  * #{imp}")
-          end)
-
-          shell_info("\nTotal: #{length(imports)} dependencies")
-        end
-
-      {:error, :not_found} ->
-        shell_error("Graph '#{graph_name}' not found. Run `mix code.deps build` first.")
-    end
+    with_graph(graph_name, fn graph ->
+      shell_info("Dependencies (imports) of #{entity}:\n")
+      {:ok, imports} = InMemoryGraph.imports_of(graph, entity)
+      print_list(imports, "dependencies", "No dependencies found.")
+    end)
   end
 
   defp show_reverse_deps(entity, opts) do
     graph_name = opts[:graph] || "deps"
 
+    with_graph(graph_name, fn graph ->
+      shell_info("Modules that import #{entity}:\n")
+      {:ok, importers} = InMemoryGraph.imported_by(graph, entity)
+      print_list(importers, "importers", "No modules import this entity.")
+    end)
+  end
+
+  defp show_stats(opts) do
+    graph_name = opts[:graph] || "deps"
+
+    with_graph(graph_name, fn graph ->
+      stats = InMemoryGraph.stats(graph)
+
+      shell_info("""
+      Graph Statistics: #{graph_name}
+
+      Nodes: #{stats.node_count}
+      Edges: #{stats.edge_count}
+
+      Node types:
+      #{format_type_counts(stats.nodes_by_type)}
+
+      Edge types:
+      #{format_type_counts(stats.edges_by_type)}
+      """)
+
+      show_top_modules(graph)
+    end)
+  end
+
+  defp with_graph(graph_name, fun) do
     case get_graph(graph_name) do
       {:ok, graph} ->
-        shell_info("Modules that import #{entity}:\n")
-
-        {:ok, importers} = InMemoryGraph.imported_by(graph, entity)
-
-        if importers == [] do
-          shell_info("No modules import this entity.")
-        else
-          Enum.each(importers, fn imp ->
-            shell_info("  * #{imp}")
-          end)
-
-          shell_info("\nTotal: #{length(importers)} importers")
-        end
+        fun.(graph)
 
       {:error, :not_found} ->
         shell_error("Graph '#{graph_name}' not found. Run `mix code.deps build` first.")
     end
   end
 
-  defp show_stats(opts) do
-    graph_name = opts[:graph] || "deps"
+  defp print_list([], _label, empty_message) do
+    shell_info(empty_message)
+  end
 
-    case get_graph(graph_name) do
-      {:ok, graph} ->
-        stats = InMemoryGraph.stats(graph)
+  defp print_list(items, label, _empty_message) do
+    Enum.each(items, fn item -> shell_info("  * #{item}") end)
+    shell_info("\nTotal: #{length(items)} #{label}")
+  end
 
-        shell_info("""
-        Graph Statistics: #{graph_name}
+  defp show_top_modules(graph) do
+    {:ok, modules} = InMemoryGraph.nodes_by_type(graph, :module)
 
-        Nodes: #{stats.node_count}
-        Edges: #{stats.edge_count}
+    if modules != [] do
+      shell_info("Top modules by import count:")
 
-        Node types:
-        #{format_type_counts(stats.nodes_by_type)}
-
-        Edge types:
-        #{format_type_counts(stats.edges_by_type)}
-        """)
-
-        # Show top modules by connections
-        {:ok, modules} = InMemoryGraph.nodes_by_type(graph, :module)
-
-        if length(modules) > 0 do
-          shell_info("Top modules by import count:")
-
-          modules
-          |> Enum.map(fn m ->
-            {:ok, imports} = InMemoryGraph.imports_of(graph, m.id)
-            {m.name, length(imports)}
-          end)
-          |> Enum.sort_by(fn {_, count} -> -count end)
-          |> Enum.take(10)
-          |> Enum.each(fn {name, count} ->
-            shell_info("  #{name}: #{count} imports")
-          end)
-        end
-
-      {:error, :not_found} ->
-        shell_error("Graph '#{graph_name}' not found. Run `mix code.deps build` first.")
+      modules
+      |> Enum.map(fn m ->
+        {:ok, imports} = InMemoryGraph.imports_of(graph, m.id)
+        {m.name, length(imports)}
+      end)
+      |> Enum.sort_by(fn {_, count} -> -count end)
+      |> Enum.take(10)
+      |> Enum.each(fn {name, count} ->
+        shell_info("  #{name}: #{count} imports")
+      end)
     end
   end
 
@@ -243,8 +233,7 @@ defmodule Mix.Tasks.Code.Deps do
   defp format_type_counts(type_map) do
     type_map
     |> Enum.sort_by(fn {_, count} -> -count end)
-    |> Enum.map(fn {type, count} -> "  #{type}: #{count}" end)
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", fn {type, count} -> "  #{type}: #{count}" end)
   end
 
   defp shell_info(message), do: IO.puts(message)

@@ -20,10 +20,10 @@ defmodule PortfolioCoder.Agent.Specialists.RefactorAgent do
       {:ok, analysis, session} = RefactorAgent.analyze_module(session, "MyModule")
   """
 
-  alias PortfolioCoder.Agent.Session
   alias PortfolioCoder.Agent.CodeAgent
-  alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Agent.Session
   alias PortfolioCoder.Graph.CallGraph
+  alias PortfolioCoder.Graph.InMemoryGraph
 
   @doc """
   Create a new refactor session with specialized context.
@@ -306,8 +306,8 @@ defmodule PortfolioCoder.Agent.Specialists.RefactorAgent do
 
   defp determine_priority(opportunities) do
     cond do
-      length(opportunities.circular_deps) > 0 -> :high
-      length(opportunities.god_functions) > 0 -> :high
+      opportunities.circular_deps != [] -> :high
+      opportunities.god_functions != [] -> :high
       length(opportunities.high_complexity) > 5 -> :medium
       length(opportunities.low_cohesion) > 3 -> :medium
       true -> :low
@@ -330,11 +330,11 @@ defmodule PortfolioCoder.Agent.Specialists.RefactorAgent do
     high_complexity = Enum.filter(function_analyses, &(&1.complexity > 10))
 
     suggestions =
-      if length(high_complexity) > 0 do
+      if high_complexity == [] do
+        suggestions
+      else
         funcs = Enum.map_join(high_complexity, ", ", & &1.id)
         ["Consider simplifying: #{funcs}" | suggestions]
-      else
-        suggestions
       end
 
     suggestions =

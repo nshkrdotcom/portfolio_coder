@@ -38,9 +38,9 @@ defmodule PortfolioCoder.Search.QueryEnhancer do
   Without explicit context, defaults to Gemini LLM.
   """
 
-  alias PortfolioIndex.Adapters.QueryRewriter
-  alias PortfolioIndex.Adapters.QueryExpander
   alias PortfolioIndex.Adapters.QueryDecomposer
+  alias PortfolioIndex.Adapters.QueryExpander
+  alias PortfolioIndex.Adapters.QueryRewriter
 
   @type enhanced_query :: %{
           original: String.t(),

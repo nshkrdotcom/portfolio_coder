@@ -19,12 +19,12 @@ defmodule PortfolioCoder.Workflow.Workflows do
       {:ok, result} = Workflows.plan_refactoring(graph, functions)
   """
 
-  alias PortfolioCoder.Workflow.Pipeline
-  alias PortfolioCoder.Indexer.Parser
+  alias PortfolioCoder.Graph.CallGraph
+  alias PortfolioCoder.Graph.InMemoryGraph
   alias PortfolioCoder.Indexer.CodeChunker
   alias PortfolioCoder.Indexer.InMemorySearch
-  alias PortfolioCoder.Graph.InMemoryGraph
-  alias PortfolioCoder.Graph.CallGraph
+  alias PortfolioCoder.Indexer.Parser
+  alias PortfolioCoder.Workflow.Pipeline
 
   @doc """
   Build and run a repository analysis pipeline.
@@ -273,28 +273,30 @@ defmodule PortfolioCoder.Workflow.Workflows do
   defp chunk_code(ctx) do
     chunks =
       ctx.parsed
-      |> Enum.flat_map(fn parsed ->
-        content = File.read!(parsed.path)
-
-        case CodeChunker.chunk_content(content,
-               language: parsed.language,
-               strategy: :hybrid,
-               chunk_size: 500
-             ) do
-          {:ok, file_chunks} ->
-            Enum.map(file_chunks, fn chunk ->
-              Map.merge(chunk, %{
-                file: parsed.relative_path,
-                language: parsed.language
-              })
-            end)
-
-          {:error, _} ->
-            []
-        end
-      end)
+      |> Enum.flat_map(&chunk_file/1)
 
     {:ok, %{ctx | chunks: chunks}}
+  end
+
+  defp chunk_file(parsed) do
+    content = File.read!(parsed.path)
+
+    case CodeChunker.chunk_content(content,
+           language: parsed.language,
+           strategy: :hybrid,
+           chunk_size: 500
+         ) do
+      {:ok, file_chunks} ->
+        Enum.map(file_chunks, fn chunk ->
+          Map.merge(chunk, %{
+            file: parsed.relative_path,
+            language: parsed.language
+          })
+        end)
+
+      {:error, _} ->
+        []
+    end
   end
 
   defp build_index(ctx) do

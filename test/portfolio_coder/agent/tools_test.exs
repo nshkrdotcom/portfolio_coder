@@ -3,8 +3,8 @@ defmodule PortfolioCoder.Agent.ToolsTest do
 
   alias PortfolioCoder.Agent.Tool
   alias PortfolioCoder.Agent.Tools
-  alias PortfolioCoder.Indexer.InMemorySearch
   alias PortfolioCoder.Graph.InMemoryGraph
+  alias PortfolioCoder.Indexer.InMemorySearch
 
   describe "Tool.to_function_spec/1" do
     test "converts tool module to function spec" do
@@ -33,7 +33,7 @@ defmodule PortfolioCoder.Agent.ToolsTest do
       {:ok, results} = Tools.SearchCode.execute(params, context)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
       assert hd(results).path == "lib/auth.ex"
     end
 
