@@ -79,7 +79,7 @@ defmodule PortfolioCoder.MixProject do
       {:telemetry, "~> 1.2"},
 
       # Development
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.1", only: :test},
@@ -111,7 +111,7 @@ defmodule PortfolioCoder.MixProject do
         "GitHub" => @source_url,
         "Portfolio Ecosystem" => "https://github.com/nshkrdotcom/portfolio_core"
       },
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md assets),
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md assets guides),
       maintainers: ["nshkrdotcom"]
     ]
   end
@@ -126,7 +126,38 @@ defmodule PortfolioCoder.MixProject do
       extras: [
         "README.md",
         "CHANGELOG.md",
-        "LICENSE"
+        "LICENSE",
+        "guides/quickstart.md",
+        "guides/architecture.md",
+        "guides/configuration.md",
+        "guides/llm-routing.md",
+        "guides/agent-sessions.md",
+        "guides/indexing-rag.md",
+        "guides/cli.md",
+        "guides/examples.md",
+        "guides/integration.md",
+        "guides/troubleshooting.md"
+      ],
+      groups_for_extras: [
+        "Getting Started": [
+          "README.md",
+          "guides/quickstart.md",
+          "guides/cli.md",
+          "guides/examples.md"
+        ],
+        Architecture: [
+          "guides/architecture.md",
+          "guides/integration.md",
+          "guides/llm-routing.md",
+          "guides/agent-sessions.md",
+          "guides/indexing-rag.md",
+          "guides/configuration.md",
+          "guides/troubleshooting.md"
+        ],
+        Project: [
+          "CHANGELOG.md",
+          "LICENSE"
+        ]
       ],
       groups_for_modules: [
         Core: [
@@ -161,6 +192,7 @@ defmodule PortfolioCoder.MixProject do
           PortfolioCoder.Tools.AnalyzeCode
         ],
         "CLI - Code": [
+          Mix.Tasks.Code.AgentSession,
           Mix.Tasks.Code.Index,
           Mix.Tasks.Code.Search,
           Mix.Tasks.Code.Ask,
