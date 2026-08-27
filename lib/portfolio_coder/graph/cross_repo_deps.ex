@@ -302,7 +302,7 @@ defmodule PortfolioCoder.Graph.CrossRepoDeps do
       end)
       |> Enum.group_by(& &1.from, & &1.to)
 
-    calculate_depth(repo_name, adj, MapSet.new())
+    calculate_depth(repo_name, adj, empty_set())
   end
 
   @doc """
@@ -310,7 +310,7 @@ defmodule PortfolioCoder.Graph.CrossRepoDeps do
   """
   @spec get_all_dependents(graph(), String.t()) :: [%{name: String.t()}]
   def get_all_dependents(graph, repo_name) do
-    find_transitive_dependents(graph, MapSet.new([repo_name]), MapSet.new())
+    find_transitive_dependents(graph, MapSet.new([repo_name]), empty_set())
     |> Enum.reject(&(&1 == repo_name))
     |> Enum.map(fn name -> %{name: name} end)
   end
@@ -331,6 +331,12 @@ defmodule PortfolioCoder.Graph.CrossRepoDeps do
       %{name: name} -> name
       name when is_binary(name) -> name
     end)
+  end
+
+  defp empty_set do
+    # Avoid compile-time folding of MapSet.new/0 into a literal (Dialyzer opaque warning).
+    empty = []
+    MapSet.new(empty)
   end
 
   defp build_edges(repos) do
@@ -439,11 +445,11 @@ defmodule PortfolioCoder.Graph.CrossRepoDeps do
 
   defp find_all_cycles(nodes, adj) do
     {cycles, _} =
-      Enum.reduce(nodes, {[], MapSet.new()}, fn node, {cycles_acc, visited} ->
+      Enum.reduce(nodes, {[], empty_set()}, fn node, {cycles_acc, visited} ->
         if MapSet.member?(visited, node) do
           {cycles_acc, visited}
         else
-          {new_cycles, new_visited} = dfs_cycles(node, adj, [], MapSet.new(), visited)
+          {new_cycles, new_visited} = dfs_cycles(node, adj, [], empty_set(), visited)
           {cycles_acc ++ new_cycles, new_visited}
         end
       end)

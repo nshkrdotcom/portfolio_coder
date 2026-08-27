@@ -107,6 +107,20 @@ mix code.ask "How does authentication work?" --index my_project
 mix code.deps build /path/to/repo --graph my_deps
 ```
 
+## Documentation
+
+See the HexDocs guides for detailed usage:
+
+- `guides/quickstart.md` - Minimal setup + core workflows
+- `guides/architecture.md` - Layering and ownership model
+- `guides/configuration.md` - Providers, router, agent sessions
+- `guides/llm-routing.md` - Routing and graceful degradation
+- `guides/agent-sessions.md` - Claude/Codex autonomous sessions
+- `guides/indexing-rag.md` - Indexing and RAG flows
+- `guides/cli.md` - CLI reference
+- `guides/examples.md` - Example scripts and prerequisites
+- `guides/troubleshooting.md` - Common issues and fixes
+
 ## Portfolio Structure
 
 Portfolio Coder uses a centralized repository to store project context:

@@ -2,7 +2,7 @@
 #
 # Demonstrates: Complete End-to-End Code Intelligence Pipeline
 # Modules Used: All portfolio_coder modules
-# Prerequisites: GEMINI_API_KEY or other LLM API key
+# Prerequisites: LLM provider configured
 #
 # Usage: mix run examples/15_full_demo.exs [path_to_directory]
 #
@@ -19,6 +19,7 @@ alias PortfolioCoder.Indexer.CodeChunker
 alias PortfolioCoder.Indexer.InMemorySearch
 alias PortfolioCoder.Search.QueryEnhancer
 alias PortfolioCoder.Graph.InMemoryGraph
+alias PortfolioCoder.LLM
 
 defmodule FullDemo do
   @moduledoc """
@@ -28,8 +29,10 @@ defmodule FullDemo do
   def run(path) do
     print_header("Portfolio Coder - Complete Demo")
 
+    providers = available_llm_providers()
+
     IO.puts("Source directory: #{path}")
-    IO.puts("LLM: #{if System.get_env("GEMINI_API_KEY"), do: "Gemini", else: "Not available"}")
+    IO.puts("LLM: #{format_llm_status(providers)}")
     IO.puts("")
 
     # Phase 1: Indexing
@@ -209,7 +212,7 @@ defmodule FullDemo do
 
     IO.puts("Retrieved #{length(results)} relevant documents")
 
-    if System.get_env("GEMINI_API_KEY") do
+    if llm_available?() do
       prompt = """
       Answer this question based on the context.
 
@@ -223,17 +226,17 @@ defmodule FullDemo do
 
       messages = [%{role: :user, content: prompt}]
 
-      case PortfolioIndex.Adapters.LLM.Gemini.complete(messages, max_tokens: 500) do
-        {:ok, %{content: answer}} ->
+      case LLM.complete(messages, max_tokens: 500) do
+        {:ok, response} ->
           IO.puts("")
           IO.puts("Answer:")
-          IO.puts("  #{String.slice(answer, 0, 300)}...")
+          IO.puts("  #{String.slice(extract_answer(response), 0, 300)}...")
 
         {:error, reason} ->
-          IO.puts("  LLM error: #{inspect(reason)}")
+          IO.puts("  LLM error: #{LLM.format_error(reason)}")
       end
     else
-      IO.puts("  (Set GEMINI_API_KEY for answer generation)")
+      IO.puts("  (No LLM provider configured; skipping answer generation)")
     end
   end
 
@@ -286,6 +289,33 @@ defmodule FullDemo do
       IO.puts("  #{type}: #{count}")
     end
   end
+
+  defp extract_answer(%{content: content}) when is_binary(content), do: content
+  defp extract_answer(%{output: output}) when is_binary(output), do: output
+  defp extract_answer(%{text: text}) when is_binary(text), do: text
+  defp extract_answer(other), do: inspect(other)
+
+  defp available_llm_providers do
+    [
+      {"gemini", System.get_env("GEMINI_API_KEY")},
+      {"openai", System.get_env("OPENAI_API_KEY")},
+      {"codex", System.get_env("CODEX_API_KEY")},
+      {"anthropic", System.get_env("ANTHROPIC_API_KEY")},
+      {"ollama", System.get_env("OLLAMA_BASE_URL") || System.get_env("OLLAMA_HOST")},
+      {"vllm",
+       System.get_env("VLLM_BASE_URL") || System.get_env("VLLM_URL") ||
+         System.get_env("VLLM_ENABLED")}
+    ]
+    |> Enum.filter(fn {_name, value} -> is_binary(value) and value != "" end)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  defp llm_available? do
+    available_llm_providers() != []
+  end
+
+  defp format_llm_status([]), do: "Not configured"
+  defp format_llm_status(providers), do: Enum.join(providers, ", ")
 
   defp shorten(name) do
     name

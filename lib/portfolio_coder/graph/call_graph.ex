@@ -42,7 +42,7 @@ defmodule PortfolioCoder.Graph.CallGraph do
   @spec transitive_callees(graph(), String.t(), keyword()) :: {:ok, [String.t()]}
   def transitive_callees(graph, function_id, opts \\ []) do
     max_depth = Keyword.get(opts, :max_depth, 50)
-    result = traverse_callees(graph, function_id, MapSet.new(), 0, max_depth)
+    result = traverse_callees(graph, function_id, empty_set(), 0, max_depth)
     # Remove the starting node from results
     {:ok, MapSet.delete(result, function_id) |> MapSet.to_list()}
   end
@@ -58,7 +58,7 @@ defmodule PortfolioCoder.Graph.CallGraph do
   @spec transitive_callers(graph(), String.t(), keyword()) :: {:ok, [String.t()]}
   def transitive_callers(graph, function_id, opts \\ []) do
     max_depth = Keyword.get(opts, :max_depth, 50)
-    result = traverse_callers(graph, function_id, MapSet.new(), 0, max_depth)
+    result = traverse_callers(graph, function_id, empty_set(), 0, max_depth)
     # Remove the starting node from results
     {:ok, MapSet.delete(result, function_id) |> MapSet.to_list()}
   end
@@ -269,7 +269,7 @@ defmodule PortfolioCoder.Graph.CallGraph do
     # A node is in an SCC if there's a cycle including it
     sccs =
       function_ids
-      |> Enum.reduce({MapSet.new(), []}, fn func_id, acc ->
+      |> Enum.reduce({empty_set(), []}, fn func_id, acc ->
         accumulate_scc(graph, func_id, acc)
       end)
       |> elem(1)
@@ -279,6 +279,12 @@ defmodule PortfolioCoder.Graph.CallGraph do
   end
 
   # Private helpers
+
+  defp empty_set do
+    # Avoid compile-time folding of MapSet.new/0 into a literal (Dialyzer opaque warning).
+    empty = []
+    MapSet.new(empty)
+  end
 
   defp traverse_callees(graph, function_id, visited, depth, max_depth) do
     cond do

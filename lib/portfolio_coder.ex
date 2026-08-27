@@ -28,6 +28,7 @@ defmodule PortfolioCoder do
         supported_languages: [:elixir, :python, :javascript]
   """
 
+  alias PortfolioCoder.AgentSession
   alias PortfolioCoder.Graph
   alias PortfolioCoder.Indexer
   alias PortfolioCoder.Search
@@ -151,6 +152,22 @@ defmodule PortfolioCoder do
   @spec stream_ask(String.t(), (String.t() -> any()), keyword()) :: :ok | {:error, term()}
   def stream_ask(question, callback, opts \\ []) when is_function(callback, 1) do
     Search.stream_ask(question, callback, opts)
+  end
+
+  @doc """
+  Run an autonomous agent session (Claude or Codex).
+
+  ## Examples
+
+      {:ok, result} = PortfolioCoder.agent_session("Explain this repo")
+      {:ok, result} = PortfolioCoder.agent_session("Refactor this module",
+        provider: :codex,
+        working_directory: "/path/to/repo"
+      )
+  """
+  @spec agent_session(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def agent_session(prompt, opts \\ []) do
+    AgentSession.run(prompt, opts)
   end
 
   @doc """

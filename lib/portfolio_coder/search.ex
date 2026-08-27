@@ -3,6 +3,7 @@ defmodule PortfolioCoder.Search do
   Code search functionality using portfolio_manager's RAG capabilities.
   """
 
+  alias PortfolioCoder.LLM
   alias PortfolioManager.RAG
 
   @doc """
@@ -40,6 +41,12 @@ defmodule PortfolioCoder.Search do
 
   @doc """
   Ask a question about the codebase.
+
+  Options:
+    - `:index_id` - Index to query (default: "default")
+    - `:strategy` - RAG strategy (default: :hybrid)
+    - `:k` - Number of chunks to retrieve (default: 5)
+    - `:llm_strategy` - LLM routing strategy for answer generation
   """
   @spec ask(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def ask(question, opts \\ []) do
@@ -49,11 +56,31 @@ defmodule PortfolioCoder.Search do
       opts
       |> Keyword.put(:index_id, index_id)
 
-    RAG.ask(question, ask_opts)
+    case RAG.query(question, ask_opts) do
+      {:ok, %{answer: answer}} when is_binary(answer) ->
+        {:ok, answer}
+
+      {:ok, %{items: items}} ->
+        prompt = build_prompt(question, items)
+        messages = [%{role: :user, content: prompt}]
+
+        case LLM.complete(messages, llm_opts(opts)) do
+          {:ok, response} ->
+            {:ok, extract_answer(response)}
+
+          {:error, reason} ->
+            {:error, {:llm_failed, reason, %{context_items: items}}}
+        end
+
+      {:error, _} = err ->
+        err
+    end
   end
 
   @doc """
   Stream an answer.
+
+  Options are the same as `ask/2` plus the stream callback.
   """
   @spec stream_ask(String.t(), (String.t() -> any()), keyword()) :: :ok | {:error, term()}
   def stream_ask(question, callback, opts \\ []) when is_function(callback, 1) do
@@ -63,7 +90,40 @@ defmodule PortfolioCoder.Search do
       opts
       |> Keyword.put(:index_id, index_id)
 
-    RAG.stream_query(question, callback, stream_opts)
+    case RAG.query(question, stream_opts) do
+      {:ok, %{items: items}} ->
+        prompt = build_prompt(question, items)
+        messages = [%{role: :user, content: prompt}]
+        LLM.stream(messages, callback, llm_opts(opts))
+
+      {:ok, %{answer: answer}} when is_binary(answer) ->
+        callback.(answer)
+        :ok
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp extract_answer(%{content: content}) when is_binary(content), do: content
+  defp extract_answer(%{output: output}) when is_binary(output), do: output
+  defp extract_answer(%{text: text}) when is_binary(text), do: text
+  defp extract_answer(other), do: inspect(other)
+
+  defp build_prompt(question, context_items) do
+    context =
+      Enum.map_join(context_items, "\n\n---\n\n", fn item ->
+        item[:content] || item.content || ""
+      end)
+
+    """
+    Answer the question based on the provided context. Be concise and accurate.
+
+    Context:
+    #{context}
+
+    Question: #{question}
+    """
   end
 
   @doc """
@@ -118,4 +178,13 @@ defmodule PortfolioCoder.Search do
   defp default_index do
     Application.get_env(:portfolio_coder, :default_index, "default")
   end
+
+  defp llm_opts(opts) do
+    opts
+    |> Keyword.drop([:index_id, :k, :limit, :strategy, :filters, :query, :context, :items])
+    |> maybe_put(:strategy, Keyword.get(opts, :llm_strategy))
+  end
+
+  defp maybe_put(opts, _key, nil), do: opts
+  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
 end

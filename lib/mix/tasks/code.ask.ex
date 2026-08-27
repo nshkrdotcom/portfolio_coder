@@ -26,6 +26,7 @@ defmodule Mix.Tasks.Code.Ask do
   use Mix.Task
 
   alias PortfolioCoder.Indexer.InMemorySearch
+  alias PortfolioCoder.LLM
 
   @shortdoc "Ask questions about code"
 
@@ -112,62 +113,33 @@ defmodule Mix.Tasks.Code.Ask do
         """
       end)
 
-    # Try available LLM providers
-    case get_llm_provider() do
-      {:ok, provider, module} ->
-        shell_info("Using #{provider} for answer generation...\n")
+    prompt = """
+    Based on the following code context, answer this question: #{question}
 
-        prompt = """
-        Based on the following code context, answer this question: #{question}
+    Context:
+    #{context}
 
-        Context:
-        #{context}
+    Provide a clear, concise answer that references the relevant code when appropriate.
+    """
 
-        Provide a clear, concise answer that references the relevant code when appropriate.
-        """
+    messages = [%{role: :user, content: prompt}]
 
-        messages = [%{role: :user, content: prompt}]
+    case LLM.complete(messages, max_tokens: 1000) do
+      {:ok, response} ->
+        shell_info("Answer:\n")
+        shell_info(extract_answer(response))
 
-        case module.complete(messages, max_tokens: 1000) do
-          {:ok, %{content: answer}} ->
-            shell_info("Answer:\n")
-            shell_info(answer)
-
-          {:error, reason} ->
-            shell_error("LLM error: #{inspect(reason)}")
-            shell_info("\nContext retrieved (answer generation failed):")
-            shell_info(context)
-        end
-
-      {:error, :no_provider} ->
-        shell_info("""
-        No LLM API key found. Set one of:
-          - GEMINI_API_KEY
-          - OPENAI_API_KEY
-          - ANTHROPIC_API_KEY
-
-        Showing retrieved context instead:
-
-        #{context}
-        """)
+      {:error, reason} ->
+        shell_error("LLM error: #{LLM.format_error(reason)}")
+        shell_info("\nContext retrieved (answer generation failed):")
+        shell_info(context)
     end
   end
 
-  defp get_llm_provider do
-    cond do
-      System.get_env("GEMINI_API_KEY") ->
-        {:ok, :gemini, PortfolioIndex.Adapters.LLM.Gemini}
-
-      System.get_env("ANTHROPIC_API_KEY") ->
-        {:ok, :anthropic, PortfolioIndex.Adapters.LLM.Anthropic}
-
-      System.get_env("OPENAI_API_KEY") ->
-        {:ok, :openai, PortfolioIndex.Adapters.LLM.OpenAI}
-
-      true ->
-        {:error, :no_provider}
-    end
-  end
+  defp extract_answer(%{content: content}) when is_binary(content), do: content
+  defp extract_answer(%{output: output}) when is_binary(output), do: output
+  defp extract_answer(%{text: text}) when is_binary(text), do: text
+  defp extract_answer(other), do: inspect(other)
 
   defp get_index(name) do
     key = {:code_index, name}

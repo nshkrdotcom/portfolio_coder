@@ -2,13 +2,14 @@
 #
 # Demonstrates: Debug Agent for Code Analysis
 # Modules Used: LLM, Parser, Graph
-# Prerequisites: GEMINI_API_KEY
+# Prerequisites: LLM provider configured
 #
 # Usage: mix run examples/10_agent_debug_demo.exs [file_to_analyze]
 #
 # A specialized agent focused on debugging and code quality analysis.
 
 alias PortfolioCoder.Indexer.Parser
+alias PortfolioCoder.LLM
 
 defmodule DebugAgentDemo do
   @analysis_prompt """
@@ -117,9 +118,9 @@ defmodule DebugAgentDemo do
 
     messages = [%{role: :user, content: prompt}]
 
-    case PortfolioIndex.Adapters.LLM.Gemini.complete(messages, max_tokens: 1500) do
-      {:ok, %{content: analysis}} ->
-        String.trim(analysis)
+    case LLM.complete(messages, max_tokens: 1500) do
+      {:ok, response} ->
+        String.trim(extract_answer(response))
 
       {:error, reason} ->
         "Error analyzing code: #{inspect(reason)}"
@@ -166,9 +167,9 @@ defmodule DebugAgentDemo do
 
     messages = [%{role: :user, content: prompt}]
 
-    case PortfolioIndex.Adapters.LLM.Gemini.complete(messages, max_tokens: 1000) do
-      {:ok, %{content: answer}} ->
-        String.trim(answer)
+    case LLM.complete(messages, max_tokens: 1000) do
+      {:ok, response} ->
+        String.trim(extract_answer(response))
 
       {:error, reason} ->
         "Error: #{inspect(reason)}"
@@ -186,11 +187,37 @@ defmodule DebugAgentDemo do
     end
   end
 
+  defp extract_answer(%{content: content}) when is_binary(content), do: content
+  defp extract_answer(%{output: output}) when is_binary(output), do: output
+  defp extract_answer(%{text: text}) when is_binary(text), do: text
+  defp extract_answer(other), do: inspect(other)
+
   defp check_api_key do
-    if System.get_env("GEMINI_API_KEY") do
-      IO.puts("Using Gemini API\n")
+    providers =
+      [
+        {"gemini", System.get_env("GEMINI_API_KEY")},
+        {"openai", System.get_env("OPENAI_API_KEY")},
+        {"codex", System.get_env("CODEX_API_KEY")},
+        {"anthropic", System.get_env("ANTHROPIC_API_KEY")},
+        {"ollama", System.get_env("OLLAMA_BASE_URL") || System.get_env("OLLAMA_HOST")},
+        {"vllm",
+         System.get_env("VLLM_BASE_URL") || System.get_env("VLLM_URL") ||
+           System.get_env("VLLM_ENABLED")}
+      ]
+      |> Enum.filter(fn {_name, value} -> is_binary(value) and value != "" end)
+      |> Enum.map(&elem(&1, 0))
+
+    if providers == [] do
+      IO.puts(:stderr, """
+      Skipping: no LLM provider configured.
+
+      Set GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+      OLLAMA_BASE_URL/OLLAMA_HOST, or VLLM_BASE_URL/VLLM_URL.
+      """)
+
+      System.halt(0)
     else
-      IO.puts(:stderr, "Warning: GEMINI_API_KEY not set\n")
+      IO.puts("LLM providers available: #{Enum.join(providers, ", ")}\n")
     end
   end
 

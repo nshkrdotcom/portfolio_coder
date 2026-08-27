@@ -2,7 +2,7 @@
 #
 # Demonstrates: Query Enhancement for Code Search
 # Modules Used: PortfolioCoder.Search.QueryEnhancer
-# Prerequisites: GEMINI_API_KEY or other LLM API key configured
+# Prerequisites: LLM provider configured
 #
 # Usage: mix run examples/03_query_enhancement_demo.exs
 #
@@ -201,27 +201,31 @@ defmodule QueryEnhancementDemo do
   end
 
   defp check_api_key do
-    cond do
-      System.get_env("GEMINI_API_KEY") ->
-        IO.puts("Using Gemini API (GEMINI_API_KEY found)\n")
+    providers =
+      [
+        {"gemini", System.get_env("GEMINI_API_KEY")},
+        {"openai", System.get_env("OPENAI_API_KEY")},
+        {"codex", System.get_env("CODEX_API_KEY")},
+        {"anthropic", System.get_env("ANTHROPIC_API_KEY")},
+        {"ollama", System.get_env("OLLAMA_BASE_URL") || System.get_env("OLLAMA_HOST")},
+        {"vllm",
+         System.get_env("VLLM_BASE_URL") || System.get_env("VLLM_URL") ||
+           System.get_env("VLLM_ENABLED")}
+      ]
+      |> Enum.filter(fn {_name, value} -> is_binary(value) and value != "" end)
+      |> Enum.map(&elem(&1, 0))
 
-      System.get_env("OPENAI_API_KEY") ->
-        IO.puts("Using OpenAI API (OPENAI_API_KEY found)\n")
+    if providers == [] do
+      IO.puts(:stderr, """
+      Skipping: no LLM provider configured.
 
-      System.get_env("ANTHROPIC_API_KEY") ->
-        IO.puts("Using Anthropic API (ANTHROPIC_API_KEY found)\n")
+      Set GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+      OLLAMA_BASE_URL/OLLAMA_HOST, or VLLM_BASE_URL/VLLM_URL.
+      """)
 
-      true ->
-        IO.puts(:stderr, """
-        Warning: No LLM API key found!
-
-        Set one of:
-          - GEMINI_API_KEY
-          - OPENAI_API_KEY
-          - ANTHROPIC_API_KEY
-
-        The demo will attempt to continue but may fail.
-        """)
+      System.halt(0)
+    else
+      IO.puts("LLM providers available: #{Enum.join(providers, ", ")}\n")
     end
   end
 

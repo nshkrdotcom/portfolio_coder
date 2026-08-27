@@ -6,7 +6,7 @@ defmodule PortfolioCoder.Indexer do
   parsers, chunks the content, and stores embeddings via portfolio_manager.
   """
 
-  alias PortfolioCoder.Parsers
+  alias PortfolioIndex.Pipelines.Ingestion
   alias PortfolioManager.RAG
 
   require Logger
@@ -60,8 +60,7 @@ defmodule PortfolioCoder.Indexer do
     files = scan_files(repo_path, languages, exclude)
     Logger.info("Found #{length(files)} files to index")
 
-    # Use portfolio_manager's RAG.index_repo with our file list
-    case index_files_via_rag(files, index_id, opts) do
+    case RAG.index_repo(repo_path, Keyword.merge(opts, index_id: index_id)) do
       {:ok, _} ->
         {:ok,
          %{
@@ -78,6 +77,9 @@ defmodule PortfolioCoder.Indexer do
 
   @doc """
   Index specific files.
+
+  Uses `PortfolioIndex.Pipelines.Ingestion.enqueue/2` for each file and
+  ensures the vector index exists via `PortfolioManager.RAG.index_repo/2`.
   """
   @spec index_files([String.t()], keyword()) :: {:ok, map()} | {:error, term()}
   def index_files(file_paths, opts \\ []) do
@@ -89,18 +91,11 @@ defmodule PortfolioCoder.Indexer do
       |> Enum.map(fn path ->
         %{
           path: Path.expand(path),
-          type: detect_language(path),
-          content: File.read!(path)
+          type: detect_language(path)
         }
       end)
 
-    case index_files_via_rag(files, index_id, opts) do
-      {:ok, _} ->
-        {:ok, %{files_indexed: length(files), index_id: index_id}}
-
-      {:error, _} = err ->
-        err
-    end
+    enqueue_files(files, index_id, opts)
   end
 
   @doc """
@@ -157,76 +152,40 @@ defmodule PortfolioCoder.Indexer do
 
   # Private functions
 
-  defp index_files_via_rag(files, index_id, opts) do
-    # Process files and prepare for indexing
-    processed =
-      files
-      |> Enum.filter(&(&1.type != :unknown))
-      |> Enum.map(fn file ->
-        content =
-          case Map.get(file, :content) do
-            nil -> File.read!(file.path)
-            c -> c
-          end
+  defp enqueue_files(files, index_id, opts) do
+    files = Enum.filter(files, &(&1.type != :unknown))
 
-        # Parse and extract structure if possible
-        parsed = parse_file(content, file.type)
+    case files do
+      [] ->
+        {:error, :no_indexable_files}
 
-        %{
-          path: file.path,
-          content: content,
-          type: file.type,
-          metadata: %{
-            language: file.type,
-            path: file.path,
-            relative_path: Map.get(file, :relative_path, file.path),
-            parsed: parsed
-          }
-        }
-      end)
+      [first | _] ->
+        repo_root = Path.dirname(first.path)
 
-    # Delegate to portfolio_manager for actual indexing
-    # Use the generic ingestion interface
-    extensions = Keyword.get(opts, :extensions, language_extensions())
+        # Ensure the vector index exists without enqueueing repo-wide files.
+        _ =
+          RAG.index_repo(
+            repo_root,
+            Keyword.merge(opts,
+              index_id: index_id,
+              extensions: []
+            )
+          )
 
-    RAG.index_repo(
-      List.first(processed)[:path] |> Path.dirname(),
-      Keyword.merge(opts,
-        index_id: index_id,
-        extensions: extensions
-      )
-    )
-  end
+        counts =
+          Enum.map(files, fn file ->
+            Ingestion.enqueue(file,
+              index_id: index_id,
+              chunk_size: Keyword.get(opts, :chunk_size, 1000),
+              chunk_overlap: Keyword.get(opts, :chunk_overlap, 200)
+            )
+          end)
 
-  defp parse_file(content, :elixir) do
-    case Parsers.Elixir.parse(content) do
-      {:ok, result} -> result
-      {:error, _} -> nil
+        {:ok, %{files_indexed: length(files), index_id: index_id, queued: counts}}
     end
   end
 
-  defp parse_file(content, :python) do
-    case Parsers.Python.parse(content) do
-      {:ok, result} -> result
-      {:error, _} -> nil
-    end
-  end
-
-  defp parse_file(content, :javascript) do
-    case Parsers.JavaScript.parse(content) do
-      {:ok, result} -> result
-      {:error, _} -> nil
-    end
-  end
-
-  defp parse_file(content, :typescript) do
-    case Parsers.JavaScript.parse(content) do
-      {:ok, result} -> result
-      {:error, _} -> nil
-    end
-  end
-
-  defp parse_file(_content, _type), do: nil
+  # Parsing helpers removed: explicit file indexing relies on ingestion pipeline.
 
   defp has_extension?(path, extensions) do
     ext = Path.extname(path) |> String.downcase()
@@ -265,10 +224,6 @@ defmodule PortfolioCoder.Indexer do
         _ -> []
       end
     end)
-  end
-
-  defp language_extensions do
-    [".ex", ".exs", ".py", ".js", ".ts", ".md", ".txt"]
   end
 
   defp supported_languages do

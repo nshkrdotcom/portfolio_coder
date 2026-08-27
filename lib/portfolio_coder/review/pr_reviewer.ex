@@ -52,31 +52,37 @@ defmodule PortfolioCoder.Review.PRReviewer do
           max_line_length: non_neg_integer()
         }
 
-  # Security patterns
-  @credential_patterns [
-    ~r/password\s*=\s*["'][^"']+["']/i,
-    ~r/api_key\s*=\s*["'][^"']+["']/i,
-    ~r/secret\s*=\s*["'][^"']+["']/i,
-    ~r/token\s*=\s*["'][^"']+["']/i,
-    ~r/sk-[a-zA-Z0-9]+/,
-    ~r/AKIA[A-Z0-9]{16}/
-  ]
+  # Security patterns - defined as function to avoid Regex escape issues at compile time
+  defp credential_patterns do
+    [
+      ~r/password\s*=\s*["'][^"']+["']/i,
+      ~r/api_key\s*=\s*["'][^"']+["']/i,
+      ~r/secret\s*=\s*["'][^"']+["']/i,
+      ~r/token\s*=\s*["'][^"']+["']/i,
+      ~r/sk-[a-zA-Z0-9]+/,
+      ~r/AKIA[A-Z0-9]{16}/
+    ]
+  end
 
-  @dangerous_functions [
-    "System.cmd",
-    "Code.eval_string",
-    "Code.eval_quoted",
-    ":os.cmd",
-    "File.write!",
-    "send_resp"
-  ]
+  defp dangerous_functions do
+    [
+      "System.cmd",
+      "Code.eval_string",
+      "Code.eval_quoted",
+      ":os.cmd",
+      "File.write!",
+      "send_resp"
+    ]
+  end
 
-  @todo_patterns [
-    ~r/TODO.*security/i,
-    ~r/FIXME.*security/i,
-    ~r/TODO.*bypass/i,
-    ~r/HACK/i
-  ]
+  defp todo_patterns do
+    [
+      ~r/TODO.*security/i,
+      ~r/FIXME.*security/i,
+      ~r/TODO.*bypass/i,
+      ~r/HACK/i
+    ]
+  end
 
   @default_checks [:security, :complexity, :style, :tests]
   @default_max_lines 500
@@ -302,7 +308,7 @@ defmodule PortfolioCoder.Review.PRReviewer do
 
     # Check for hardcoded credentials
     comments =
-      Enum.reduce(@credential_patterns, comments, fn pattern, acc ->
+      Enum.reduce(credential_patterns(), comments, fn pattern, acc ->
         if Regex.match?(pattern, content) do
           [
             %{
@@ -321,7 +327,7 @@ defmodule PortfolioCoder.Review.PRReviewer do
 
     # Check for dangerous functions
     comments =
-      Enum.reduce(@dangerous_functions, comments, fn func, acc ->
+      Enum.reduce(dangerous_functions(), comments, fn func, acc ->
         if String.contains?(content, func) do
           [
             %{
@@ -340,7 +346,7 @@ defmodule PortfolioCoder.Review.PRReviewer do
 
     # Check for security TODOs
     comments =
-      Enum.reduce(@todo_patterns, comments, fn pattern, acc ->
+      Enum.reduce(todo_patterns(), comments, fn pattern, acc ->
         if Regex.match?(pattern, content) do
           [
             %{

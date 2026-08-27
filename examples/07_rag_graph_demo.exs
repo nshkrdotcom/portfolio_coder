@@ -2,8 +2,8 @@
 #
 # Demonstrates: Graph-Augmented RAG for Code Q&A
 # Modules Used: PortfolioCoder.Graph.InMemoryGraph, PortfolioCoder.Indexer.Parser,
-#               PortfolioCoder.Indexer.InMemorySearch
-# Prerequisites: GEMINI_API_KEY or other LLM API key
+#               PortfolioCoder.Indexer.InMemorySearch, PortfolioCoder.LLM
+# Prerequisites: LLM provider configured
 #
 # Usage: mix run examples/07_rag_graph_demo.exs [path_to_directory]
 #
@@ -17,6 +17,7 @@ alias PortfolioCoder.Indexer.Parser
 alias PortfolioCoder.Indexer.CodeChunker
 alias PortfolioCoder.Indexer.InMemorySearch
 alias PortfolioCoder.Graph.InMemoryGraph
+alias PortfolioCoder.LLM
 
 defmodule RAGGraphDemo do
   @answer_prompt """
@@ -164,9 +165,9 @@ defmodule RAGGraphDemo do
 
     messages = [%{role: :user, content: prompt}]
 
-    case PortfolioIndex.Adapters.LLM.Gemini.complete(messages, max_tokens: 1000) do
-      {:ok, %{content: answer}} ->
-        {:ok, String.trim(answer)}
+    case LLM.complete(messages, max_tokens: 1000) do
+      {:ok, response} ->
+        {:ok, String.trim(extract_answer(response))}
 
       {:error, reason} ->
         {:error, reason}
@@ -262,11 +263,37 @@ defmodule RAGGraphDemo do
     end
   end
 
+  defp extract_answer(%{content: content}) when is_binary(content), do: content
+  defp extract_answer(%{output: output}) when is_binary(output), do: output
+  defp extract_answer(%{text: text}) when is_binary(text), do: text
+  defp extract_answer(other), do: inspect(other)
+
   defp check_api_key do
-    if System.get_env("GEMINI_API_KEY") do
-      IO.puts("Using Gemini API for answer generation\n")
+    providers =
+      [
+        {"gemini", System.get_env("GEMINI_API_KEY")},
+        {"openai", System.get_env("OPENAI_API_KEY")},
+        {"codex", System.get_env("CODEX_API_KEY")},
+        {"anthropic", System.get_env("ANTHROPIC_API_KEY")},
+        {"ollama", System.get_env("OLLAMA_BASE_URL") || System.get_env("OLLAMA_HOST")},
+        {"vllm",
+         System.get_env("VLLM_BASE_URL") || System.get_env("VLLM_URL") ||
+           System.get_env("VLLM_ENABLED")}
+      ]
+      |> Enum.filter(fn {_name, value} -> is_binary(value) and value != "" end)
+      |> Enum.map(&elem(&1, 0))
+
+    if providers == [] do
+      IO.puts(:stderr, """
+      Skipping: no LLM provider configured.
+
+      Set GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+      OLLAMA_BASE_URL/OLLAMA_HOST, or VLLM_BASE_URL/VLLM_URL.
+      """)
+
+      System.halt(0)
     else
-      IO.puts(:stderr, "Warning: GEMINI_API_KEY not set. Answer generation may fail.\n")
+      IO.puts("LLM providers available: #{Enum.join(providers, ", ")}\n")
     end
   end
 
